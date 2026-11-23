@@ -60,7 +60,7 @@ for source in $sh_assembly; do
         # -double=float, and no product fused into a sum, with make gcc's
         # own headers
         gcc_flags="-ml -m4-single-only -O1 -std=gnu17 -ffreestanding -fno-builtin -fno-strict-aliasing -fwrapv
-            -frounding-math -ffp-contract=off -ffunction-sections -nostdinc -DGCC -DSHZ_TLS_MODEL=SHZ_TLS_DISABLED
+            -frounding-math -ffp-contract=off -ffunction-sections -nostdinc -DNONMATCHING -DDREAMCAST -DSHZ_TLS_MODEL=SHZ_TLS_DISABLED
             -isystem tools/sh4zam/include -iwithprefix include -Isdk/include -Isdk -Isrc -I."
         "$sh_elf/bin/sh-elf-gcc" $gcc_flags -E -o "$base.i" "$source"
         python3 tools/floats.py ${SH_FLOATS:---shc r32} --system tools/sh4zam/include "$base.i"
@@ -92,7 +92,7 @@ done
 # translation's. the port's C is make pc's
 resource=$($cc -print-resource-dir)/include
 flags="--target=i386-linux-gnu -msse2 -mfpmath=sse -std=gnu17 -ffreestanding -fno-builtin -nostdinc
-    -isystem $resource -DGCC -DXBOX -DNDEBUG
+    -isystem $resource -isystem tools/sh4zam/include -DNONMATCHING -DXBOX -DNDEBUG -D__CLANG_MAX_ALIGN_T_DEFINED -DSHZ_TLS_MODEL=SHZ_TLS_DISABLED
     -U__clang__ -fgnuc-version=4.2.1 -fpack-struct=4 -fno-strict-aliasing -fwrapv -frounding-math -fno-math-errno
     -ffp-contract=off -w -O2 -Isdk/include -Isrc -I."
 objects=

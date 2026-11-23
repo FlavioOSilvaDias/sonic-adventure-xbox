@@ -1610,8 +1610,40 @@ static void raw_video_vertices(const struct host_vertex *vertices, int count)
     }
 }
 
+/* the game's MXCSR, as fpu_as_console set it before main */
+static unsigned game_csr;
+
+/* the game's float modes, checked once a frame on its thread: MXCSR less its
+ * sticky exception flags, and the x87's control word. code the game's thread
+ * calls into (the host's, nxdk's, pbkit's) must leave them as they were, or
+ * the game's sums round otherwise than the console's, as the blank's chores
+ * once made them (XBOX.md, Fixed bugs). the first change is logged, and each
+ * is put back */
+static void fpu_check(void)
+{
+    static int logged;
+    unsigned csr;
+    unsigned short word;
+
+    __asm__ volatile("stmxcsr %0" : "=m"(csr));
+    __asm__ volatile("fnstcw %0" : "=m"(word));
+    if ((csr & ~0x3fu) == (game_csr & ~0x3fu) && word == 0x0e7f) {
+        return;
+    }
+    if (!logged) {
+        logged = 1;
+        logf_("host: the game's float modes changed: MXCSR 0x%04x (0x%04x), x87 control word 0x%04x (0x0e7f)\n",
+              csr, game_csr, word);
+    }
+    csr = (game_csr & ~0x3fu) | (csr & 0x3fu);
+    word = 0x0e7f;
+    __asm__ volatile("ldmxcsr %0" : : "m"(csr));
+    __asm__ volatile("fldcw %0" : : "m"(word));
+}
+
 static void raw_video_present(void)
 {
+    fpu_check();
     if (have_video) {
         video_present();
     }
@@ -2667,6 +2699,7 @@ static unsigned fpu_as_console(void)
     csr |= 0x6000u | 0x8000u | (0x0040u & mask);
     csr &= mask;
     __asm__ volatile("ldmxcsr %0" : : "m"(csr));
+    game_csr = csr;
     {
         /* the x87's too, for the doubles FIPR's and FTRV's sums take
          * (xbox/include/sse/sh4_sse.h), as Flycast's SSE2 takes them under the

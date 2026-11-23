@@ -1,4 +1,5 @@
-"""Print a C source with each #ifdef GCC block cut to its #else side.
+"""Print a C source with each #ifdef GCC or NONMATCHING block cut to its
+#else side, and each #ifdef DREAMCAST to its own: the shipped body.
 
 Usage: shc_side.py SOURCE
 
@@ -6,6 +7,8 @@ A source whose make gcc side is GCC's own code holds its original body on
 SHC's side of an #ifdef GCC, which tools/inline.py, reading make gcc's guards,
 never splits. With the GCC side cut, it does: all.sh splits and translates
 the result for the SH-4 run of a test of the port's C of those bodies.
+Since the upstream sync, a Ninja body's source holds it as #ifdef DREAMCAST,
+#ifdef NONMATCHING, SH4ZAM's C, #else, the body: the same cut gives the body.
 Other conditionals are kept as they are.
 """
 
@@ -18,8 +21,11 @@ def shc_side(lines):
     for line in lines:
         s = line.strip()
         kept = all(k for _, k in stack)
-        if s == '#ifdef GCC':
+        if s in ('#ifdef GCC', '#ifdef NONMATCHING'):
             stack.append(['gcc', False])
+            continue
+        if s == '#ifdef DREAMCAST':
+            stack.append(['dreamcast', True])
             continue
         if s.startswith('#if'):
             stack.append(['other', True])
@@ -32,6 +38,9 @@ def shc_side(lines):
         if s.startswith('#el') and stack and stack[-1][0] == 'other':
             if all(k for _, k in stack[:-1]):
                 out.append(line)
+            continue
+        if s == '#else' and stack and stack[-1][0] == 'dreamcast':
+            stack[-1] = ['dreamcast-else', False]
             continue
         if s.startswith('#endif') and stack:
             kind, _ = stack.pop()
