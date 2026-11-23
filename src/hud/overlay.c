@@ -826,10 +826,14 @@ static void pause_draw_back(void)
 
 #ifdef NONMATCHING
     /* repairs the unset shadow colors the tag above names: this side's
-     * shadows take 0xa0000000. pause_sprites' initializer gives
-     * PART_CORNER_SHADOW and PART_SIDE_SHADOW that color */
-    *(Uint32 *)&color[2] = 0xa0000000;
-    *(Uint32 *)&color[3] = 0xa0000000;
+     * shadows take 0x00000000, no alpha. the Dreamcast shows no shadow
+     * round the back, nor a grid through its tiles (Flycast, Emerald
+     * Coast's pause): whatever the stack holds there, the tiles' shadows
+     * don't show. pause_sprites' initializer's 0xa0000000, which this took
+     * before, drew every tile's corner shadow, whose alpha runs from 51 to
+     * 221 across it, as a checkered band round the back and a grid in it */
+    *(Uint32 *)&color[2] = 0x00000000;
+    *(Uint32 *)&color[3] = 0x00000000;
 #endif
     for (tile.y = 0; tile.y < BACK_ROWS; tile.y++) {
         share = tile.y * (1.0F / BACK_ROWS);
