@@ -34,3 +34,18 @@ __pycache__/
 /xbox/host/xbox/probe/bin/
 /xbox/host/xbox/probe/main.exe
 /xbox/host/xbox/probe/probe.iso
+
+# macOS's own files: Finder's, the resource forks it writes beside files on
+# other file systems and in archives, and a volume's indexes and trash
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+__MACOSX/
+.localized
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.DocumentRevisions-V100
+.apdisk
