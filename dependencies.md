@@ -1,6 +1,6 @@
 # Dependencies: Ubuntu on WSL
 
-This is what the project needs on Ubuntu under WSL2 for the matching build (`make`, `make check`), the GCC build (`make gcc`), the port's PC build (`make -f Makefile -f pc.mk …`) and its tests. It was tested on Ubuntu 26.04 LTS, with the versions listed at the end.
+This is what the project needs on Ubuntu under WSL2 for the matching build (`make`, `make check`), the Dreamcast port's GCC build (`make dc`), the Xbox port (`make xbox`, which runs `make dc` itself) and its tests. It was tested on Ubuntu 26.04 LTS, with the versions listed at the end.
 
 ## WSL itself
 
@@ -24,7 +24,7 @@ sudo apt install -y \
   python3 python3-venv \
   clang lld llvm \
   gcc-multilib g++-multilib libc6-dev-i386 \
-  bison flex \
+  bison flex cmake cargo \
   qemu-user \
   xxd \
   libsdl2-dev:i386 libgl-dev:i386 libegl-dev:i386 libgl1-mesa-dri:i386 \
@@ -37,13 +37,15 @@ What each group is for:
 | Packages | Used by |
 | --- | --- |
 | `build-essential`, `make`, `git`, `coreutils` (`sha256sum`, `timeout`) | everything: the README's requirements |
-| `curl`, `tar`, `gzip`, `xz-utils` | the first `make`, which downloads wibo and three SHC releases, and the first `make gcc`, which downloads binutils, GCC, GMP, MPFR and MPC. Each download is checked against `tools/SHA256SUMS`. |
+| `curl`, `tar`, `gzip`, `xz-utils` | the first `make` or `make check`, which downloads wibo and three SHC releases (the Xbox port doesn't need them), and the first `make dc` (or `make xbox`), which downloads binutils, GCC, GMP, MPFR and MPC. Each download is checked against `tools/SHA256SUMS`. |
 | `python3`, `python3-venv` | every build tool in `tools/` and the tests; `make lint`/`make format` install clang-format and clang-tidy into a venv |
-| `g++`, `bison`, `flex` (`build-essential` brings `g++`) | building GCC 16.2 for SH-4 in `tools/sh-elf` (`make gcc`) |
+| `g++`, `bison`, `flex` (`build-essential` brings `g++`) | building GCC 16.2 for SH-4 in `tools/sh-elf` (the first `make dc` or `make xbox`) |
 | `clang`, `lld`, `llvm` (version 21 or later) | make pc: `clang --target=i386-elf`, `ld.lld`, `llvm-nm`, `llvm-objdump`, `llvm-readelf`, `llvm-objcopy` |
 | `gcc-multilib`, `g++-multilib`, `libc6-dev-i386` | compiling the 32-bit host with `cc -m32` |
 | `libsdl2-dev:i386`, `libgl-dev:i386`, `libegl-dev:i386`, `libgl1-mesa-dri:i386`, `libx11-dev:i386`, `libwayland-dev:i386` | the host's window and OpenGL (Mesa's llvmpipe under WSLg) |
 | `libasound2-dev:i386`, `libpulse-dev:i386` | SDL2's audio, for the port's sound |
+| `cmake` | nxdk's `extract-xiso`, which packs the Xbox's ISO and folder (`make xbox`) |
+| `cargo` | `cargo install dsp56300-asm --version 1.0.0 --root ~/refs/dsp-tools`, the assembler of nxdk-audio's DSP program, which the Xbox host's build runs |
 | `qemu-user` (`qemu-sh4`) | `xbox/test/`, which runs SH-4 code against its x86 translations |
 | `xxd` | inspecting binaries; optional |
 
@@ -51,7 +53,7 @@ On an Ubuntu release whose default clang is older than 21, install a versioned o
 
 ## For stage 5, the Xbox
 
-- **nxdk**, cloned with its submodules: `git clone --recursive https://github.com/XboxDev/nxdk`. It needs `make`, `clang`, `lld`, `git` and CMake. Where CMake can't be installed system-wide, a venv's will do: `python3 -m venv nxdk-venv && nxdk-venv/bin/pip install cmake`, with `nxdk-venv/bin` on `PATH`. The port patches its pbkit with `xbox/third_party/nxdk-pbkit-lost-swap.patch` (a frame pbkit retired without showing it): `xbox/host/xbox/run.sh` applies it to the checkout the first time, with `git apply`, and rebuilds pbkit's objects.
+- **nxdk**, cloned with its submodules: `git clone --recursive https://github.com/XboxDev/nxdk`. It needs `make`, `clang`, `lld`, `git` and CMake. The port was built with revision `004fefbfe8fd93a5ea8ee9a95ff187b0f58ec8ed`. Where CMake can't be installed system-wide, a venv's will do: `python3 -m venv nxdk-venv && nxdk-venv/bin/pip install cmake`, with `nxdk-venv/bin` on `PATH`. The port patches its pbkit with `xbox/third_party/nxdk-pbkit-lost-swap.patch` (a frame pbkit retired without showing it): `xbox/host/xbox/run.sh` applies it to the checkout the first time, with `git apply`, and rebuilds pbkit's objects.
 - **xemu**, to run the XBE, with the Xbox's BIOS, MCPX ROM and a hard disk image.
 
 ## What the build downloads itself
@@ -59,7 +61,7 @@ On an Ubuntu release whose default clang is older than 21, install a versioned o
 None of these need installing by hand:
 
 - **wibo and Hitachi's SHC** (three releases, from decomp.me's compiler archive): downloaded by the first `make` into `tools/`. If `tools/wibo-i686` ends up not executable, run `chmod +x tools/wibo-i686`.
-- **GCC 16.2.0 for SH-4** (`tools/sh-elf`): fetched and built by the first `make gcc`. This takes a while.
+- **GCC 16.2.0 for SH-4** (`tools/sh-elf`): fetched and built by the first `make dc` or `make xbox`. This takes a while.
 - **gdi, prskit and shckit:** vendored, and built into `build/` by make.
 - **nxdk-audio** (MIT; its HRTF table, `audio_hrtf.h`, is the SONICOM dataset, CC BY 4.0): cloned from https://github.com/Ryzee119/nxdk-audio by `xbox/host/xbox/run.sh` into `~/refs/nxdk-audio` (`NXDK_AUDIO_DIR`), at revision `fc2deca2cc1e434805ac03ca7c2f500b3b028f36`, which it then patches with `xbox/third_party/nxdk-audio-loop-start.patch` (`nxAudioVoiceSetLoopStart`). Its DSP program, `passthrough.a56`, is assembled by `dsp56300-asm` 1.0.0 (`cargo install dsp56300-asm --version 1.0.0`; `DSP56300_ASM`, default `~/refs/dsp-tools/bin/dsp56300-asm`).
 - **pl_mpeg** (MIT): already in `xbox/third_party/pl_mpeg.h`.
@@ -89,5 +91,9 @@ echo 'int main(void){return 0;}' > /tmp/t.c && cc -m32 /tmp/t.c -o /tmp/t32 -lSD
 | GNU make | 4.4.1 |
 | git | 2.53 |
 | qemu-sh4 | 10.2.1 |
+| CMake | 4.2.3 |
+| cargo | 1.93.1 |
+| dsp56300-asm | 1.0.0 |
+| nxdk | 004fefb (2026-11-02) |
 | SDL2 (i386) | 2.32.10 |
 | Mesa (i386) | 26.0.8 |

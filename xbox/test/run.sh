@@ -3,8 +3,8 @@
 # compare the two runs' output line by line.
 #
 # The SH-4 run links SH_ASSEMBLY, the GNU as text build/shckit writes of the
-# original assembly under make gcc, as build/gcc/src/system/math.s, or an
-# object make gcc built, as build/gcc/src/system/thread.o, and runs under
+# shipped assembly, as all.sh makes build/pc/test/orig/src/system/math.s, or
+# make dc's split C, as build/dc/src/system/thread.c, and runs under
 # qemu-sh4. emulate.py first replaces each FIPR, FTRV, FSCA and FSRRA,
 # which qemu-sh4 can't run, by a call to emulate.c's model of it.
 #
@@ -18,7 +18,7 @@
 # Both link libm.c, so the tests' models of FSCA and FSRRA give the same
 # bits on both. It prints whether the runs match, and leaves both
 # outputs and their diff under build/pc/test/NAME/. Run it from the
-# checkout's root, after make gcc has written SH_ASSEMBLY
+# checkout's root, after SH_ASSEMBLY is written (all.sh writes its own)
 set -eu
 name=$1 sh_assembly=$2 c_sources=$3
 out=build/pc/test/$name
@@ -30,12 +30,12 @@ sh_objects=
 for source in $sh_assembly; do
     case $source in
     *.o)
-        # an object make gcc built, C and its assembly, linked as it is
+        # an object make dc built, C and its assembly, linked as it is
         sh_objects="$sh_objects $source"
         continue
         ;;
     *.c)
-        # make gcc's split C of a source with inline assembly, whose
+        # make dc's split C of a source with inline assembly, whose
         # file-scope asm includes its translated bodies, compiled for the
         # SH-4 after NAME.sed adapts it. -ffunction-sections puts each function
         # at its section's start, where a branch from the bodies lands, as
@@ -55,9 +55,9 @@ for source in $sh_assembly; do
             python3 xbox/test/emulate.py "$base.included.paired.s" "$base.included.s"
             sed -i "s|\.include \\\\\"$included\\\\\"|.include \\\\\"$base.included.s\\\\\"|" "$source"
         fi
-        # as make gcc compiles it: its preprocessed text through the float
+        # as make dc compiles it: its preprocessed text through the float
         # pass, for the release and flags SH_FLOATS gives, as --shc r10
-        # -double=float, and no product fused into a sum, with make gcc's
+        # -double=float, and no product fused into a sum, with make dc's
         # own headers
         gcc_flags="-ml -m4-single-only -O1 -std=gnu17 -ffreestanding -fno-builtin -fno-strict-aliasing -fwrapv
             -frounding-math -ffp-contract=off -ffunction-sections -nostdinc -DNONMATCHING -DDREAMCAST -DSHZ_TLS_MODEL=SHZ_TLS_DISABLED

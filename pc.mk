@@ -279,6 +279,20 @@ xbox-pc-test-link: build/pc/link/report.txt
 # xbox-pc-test-run write it first. make xbox-pc-test-host builds the PC's host, a 32-bit Linux program, with the system's C compiler.
 # the game calls it with the 4-byte stack alignment config/pc.mk builds for,
 # so each of its functions aligns its own stack
+# the port's images link by make dc's spec, which only make dc's link
+# writes, and which make reads dc.mk for only where a goal names dc. where
+# it's missing, a make of its own runs make dc. make xbox and make
+# xbox-disc run make dc first themselves, which keeps the spec current
+build/dc/link/spec.txt:
+	$(Q)$(MAKE) --no-print-directory dc
+
+# the whole disc, build/disc/, which the PC host and make xbox's packs read,
+# extracted once from orig/'s .gdi by the tree's gdi
+build/disc/.extracted: | build/gdi
+	$(Q)[ -n $(call quoted,$(GDI_IMAGE)) ] || { echo "orig/ has no .gdi: copy your disc's .gdi and tracks there"; exit 1; }
+	@$(call status,gdi,build/disc)
+	$(Q)rm -rf build/disc && build/gdi extract $(call quoted,$(GDI_IMAGE)) build/disc && touch $@
+
 build/pc/disc/images.txt: build/pc/link/report.txt tools/pcdisc.py tools/images.py build/prskit
 	@$(call status,disc,build/pc/disc/)
 	$(Q)python3 tools/pcdisc.py build/pc/link build/pc/disc
@@ -326,17 +340,23 @@ build/pc/sndreplay$(SNDREPLAY_NAME): $(SNDREPLAY_SOURCES) xbox/host/xbox/aica_ch
 sndreplay: build/pc/sndreplay$(SNDREPLAY_NAME)
 
 # make xbox-pc-test-run runs the game on the PC, from build/disc/, the disc's files,
-# which make extracts from the .gdi in orig/
-xbox-pc-test-run: build/pc/disc/images.txt build/pc/host
+# which make extracts from the .gdi in orig/ where they aren't yet
+xbox-pc-test-run: build/pc/disc/images.txt build/pc/host build/disc/.extracted
 	$(Q)build/pc/host build/pc/link build/pc/disc build/disc
 
 # make xbox builds the Xbox's host and the console's folder, build/xbox/iso/,
 # for a transfer to a console's hard disk: default.xbe, host.txt and the
 # packs, of which a build changes modules.pak alone (xbox/host/xbox/run.sh,
 # pack.py). make xbox-disc makes build/xbox/sonic.iso from it as well.
-# XBOX_SETTINGS="KEY=VALUE ..." are host.txt's lines
-xbox: build/pc/disc/images.txt
-	$(Q)xbox/host/xbox/run.sh stage $(XBOX_SETTINGS)
-xbox-disc: build/pc/disc/images.txt
-	$(Q)xbox/host/xbox/run.sh iso $(XBOX_SETTINGS)
+# XBOX_SETTINGS="KEY=VALUE ..." are host.txt's lines. each builds what
+# it needs from a clean tree: make dc's link and spec, the x86 images and
+# the extracted disc
+# the steps run one after another, each a make of its own: make dc and the
+# x86 images both write build/gen/, so built side by side they left the
+# x86 objects older than their sources, and the next build compiled them
+# again
+xbox xbox-disc:
+	$(Q)$(MAKE) --no-print-directory dc
+	$(Q)$(MAKE) --no-print-directory build/pc/disc/images.txt build/disc/.extracted
+	$(Q)xbox/host/xbox/run.sh $(if $(filter xbox-disc,$@),iso,stage) $(XBOX_SETTINGS)
 .PHONY: xbox-pc-test xbox-pc-test-link xbox-pc-test-host xbox-pc-test-run xbox xbox-disc sndreplay

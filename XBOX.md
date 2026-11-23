@@ -55,7 +55,7 @@ Checks that must keep passing:
 ## Target resolution
 
 - **640×480**, 4:3, the Dreamcast's own resolution, with **two-sample antialiasing** (a 1280×480 surface resolved to the screen), triple-buffered with vsync, at the game's 30 frames a second.
-- **16:9:** the port can squeeze the picture for a widescreen TV (`port_toggles[TOGGLE_WIDE]`, flipped from the overlay).
+- **16:9:** the port can squeeze the picture for a widescreen TV (`HOST_WIDESCREEN`: by default the dashboard's widescreen setting; 0 off, 1 on; 720p always has it).
 - **720p** (`HOST_720P=1`, where the dashboard allows it): the game's 640×480 scene scaled to 1280×720 on a 1280×720 surface copied to the screen, with 16:9 on and no antialiasing (experimental).
 
 ## New features
@@ -89,6 +89,7 @@ Changes made with these fixes:
 
 - **The right stick's up and down** no longer raise and lower the camera: they do nothing, as the console's pad has no such stick. Left and right still turn it, past a 20% dead zone.
 - **The sky** is drawn last of the opaque list, and profiled apart (`port_sky_task`).
+- **The triggers-and-d-pad chord** no longer flips 16:9, 60 frames a second or the timing readout's pages: `host.txt` sets them (`HOST_WIDESCREEN`, `HOST_60FPS=1`), and a save's load no longer changes them. The triggers and the d-pad reach the game as they are.
 - **720p** always uses 16-bit color; where the dashboard refuses 720p, the picture is 480p at 32 bits.
 - **The draw distance setting** (`HOST_DRAW_DISTANCE`) is gone: a distance other than the console's broke some levels. The land, the far clip and the range objects are made at are the console's again.
 - **Test switches removed** once the bugs above were found: the blank's holds (`HOST_BLANK_DEFER`, `HOST_BLANK_PARTS`), the flash and land detector (`HOST_FLASH_WATCH`, which freed about 18 KB of `1ST_READ.BIN`'s data), the old waiting present (`HOST_SYNC_PRESENT`), the vertex check, the draw dumps, the hardware write watches, the audio and video tests, the sound tests and probes, and the renderer's and present's on/off switches (`HOST_KEEP`, `HOST_SORT`, `HOST_GPU_MODELS`, `HOST_SKY_LAST`, `HOST_TILES`, `HOST_FOG_TABLE`, `HOST_DEPTH_BOTTOM`, `HOST_GUARD`, `HOST_CULL_FLIP`, `HOST_DEPTH_FIXED`, `HOST_TEXTURE_RECHECK`, `HOST_TEXTURE_POOL`, `HOST_IDLE_PRESENT`, `HOST_PRESENT_WAIT`, `HOST_BLANK_LOCK`, among others). What they turned on or off is now fixed at its default. The renderer's model paths and the translucent sort's mode can still be set with `HOST_POKE` (`port_gpu_models`, `port_sort_triangles`).
@@ -132,6 +133,7 @@ The watch (on whenever reports are): logs frames in play that draw under four fi
 
 | Setting | Effect |
 | --- | --- |
+| `HOST_WIDESCREEN=0`, `=1`, `=2` | 4:3; 16:9; or the dashboard's widescreen setting (the default). 720p is always 16:9 |
 | `HOST_60FPS=1` | 60 frames a second: each stage frame split into two pictures |
 | `HOST_720P=1` | 1280×720 output, 16:9, no antialiasing, 16-bit color |
 | `HOST_MOVIES=0` | skips the movies (on by default where `movies.pak` is on the console) |
@@ -143,32 +145,99 @@ The watch (on whenever reports are): logs frames in play that draw under four fi
 
 ## Building
 
-The build runs on Linux; on Windows it runs under WSL2. Install what `dependencies.md` lists (32-bit SDL2 and Mesa, clang and lld 21 or later, qemu-user, Python 3) and clone nxdk with its submodules to `~/refs/nxdk`. Your own disc goes in `orig/` (the `.gdi` and its tracks): it can't be downloaded. Use `-j8` at most: more runs the machine out of memory.
+The build runs on Linux; on Windows it runs under WSL2. It needs:
+
+- **clang, lld and LLVM 21 or later**, for the x86 images and the Xbox host;
+- **32-bit SDL2 and Mesa**, and a 32-bit C/C++ toolchain, for the PC test host;
+- **qemu-user** (`qemu-sh4`) for the math tests, and **Python 3** (the standard library only) for every tool;
+- **CMake** and **Rust's cargo**, for nxdk's `extract-xiso` and for `dsp56300-asm`, which assembles nxdk-audio's DSP program;
+- **nxdk**, cloned to `~/refs/nxdk`.
+
+Your own disc goes in `orig/` (the `.gdi` and its tracks): it can't be downloaded. Use `-j8` at most: more runs the machine out of memory. About 8 GB of free disk space is needed for `build/` and the toolchains, beside `orig/`. `dependencies.md` says what each package is for.
 
 ### Linux
 
+#### Ubuntu (26.04 LTS, the tested release)
+
 ```sh
-make check              # downloads wibo and SHC, builds the matching images
-make dc                 # GCC 16.2 for SH-4 (long, first time), the Dreamcast port's images and link spec
-build/gdi extract "orig/sonic.gdi" build/disc
-make xbox-pc-test xbox-pc-test-link xbox-pc-test-host   # the x86 images and the PC test host
-make xbox-pc-test-run       # the game on the PC test host
-make xbox               # the Xbox host and the console's folder, build/xbox/iso/
-make xbox-disc          # and build/xbox/sonic.iso from it
+sudo dpkg --add-architecture i386
+sudo apt update
+sudo apt install -y \
+  build-essential git make curl tar gzip xz-utils coreutils \
+  python3 python3-venv \
+  clang lld llvm \
+  gcc-multilib g++-multilib libc6-dev-i386 \
+  bison flex cmake cargo \
+  qemu-user \
+  libsdl2-dev:i386 libgl-dev:i386 libegl-dev:i386 libgl1-mesa-dri:i386 \
+  libx11-dev:i386 libwayland-dev:i386 \
+  libasound2-dev:i386 libpulse-dev:i386
 ```
 
-- Expected: `xbox-pc-test` reports `compiled 3355 of 3357 objects` (the loader's `kmsurfac` workaround and `syCache`, which the port replaces); `xbox-pc-test-link` reports `253 images linked; 0 over their areas`.
-- The Xbox host builds with nxdk at `~/refs/nxdk` (`NXDK_DIR`). `xbox/host/xbox/run.sh` applies the port's pbkit patch, `xbox/third_party/nxdk-pbkit-lost-swap.patch`, to that checkout once. It clones nxdk-audio from https://github.com/Ryzee119/nxdk-audio to `~/refs/nxdk-audio` (`NXDK_AUDIO_DIR`) at the port's revision and applies `xbox/third_party/nxdk-audio-loop-start.patch` once.
+On a release whose clang is older than 21 (24.04 has 18), add `clang-21 lld-21 llvm-21` from apt.llvm.org and put that version's `clang`, `ld.lld` and `llvm-*` first on `PATH`.
+
+#### Fedora (43 or later, for LLVM 21; untested)
+
+```sh
+sudo dnf install -y \
+  make gcc gcc-c++ git curl tar gzip xz coreutils m4 \
+  python3 \
+  clang lld llvm \
+  glibc-devel.i686 libstdc++-devel.i686 libgcc.i686 \
+  bison flex cmake cargo \
+  qemu-user \
+  SDL2-devel.i686 mesa-libGL-devel.i686 mesa-libEGL-devel.i686 mesa-dri-drivers.i686 \
+  libX11-devel.i686 wayland-devel.i686 \
+  alsa-lib-devel.i686 pulseaudio-libs-devel.i686
+```
+
+`SDL2-devel.i686` is provided by `sdl2-compat-devel` on current Fedora, which works the same for the PC host.
+
+#### Then, on either
+
+```sh
+# nxdk, at the revision the port was built with (newer ones are untried)
+git clone --recursive https://github.com/XboxDev/nxdk ~/refs/nxdk
+git -C ~/refs/nxdk checkout 004fefbfe8fd93a5ea8ee9a95ff187b0f58ec8ed
+git -C ~/refs/nxdk submodule update --init --recursive
+# the DSP assembler, where the Xbox host's Makefile looks for it (DSP56300_ASM)
+cargo install dsp56300-asm --version 1.0.0 --root ~/refs/dsp-tools
+# check the tools
+clang --version | head -1          # 21.x or later
+qemu-sh4 --version | head -1
+echo 'int main(void){return 0;}' > /tmp/t.c && cc -m32 /tmp/t.c -o /tmp/t32 -lSDL2 -lGL && echo "32-bit SDL2/GL ok"
+```
+
+Then put your disc in `orig/`, its one `.gdi` with its three tracks (any file name), and build:
+
+```sh
+make -j8 xbox           # the console's folder, build/xbox/iso/: everything it needs, from a clean tree
+make -j8 xbox-disc      # the same, and build/xbox/sonic.iso from it (untested on a console)
+```
+
+`make xbox` runs its steps in order, each skipped where it's up to date: `make dc` (the Dreamcast port's images and their link spec, which the x86 images link by; the first run builds GCC 16.2 for SH-4 into `tools/sh-elf`, which takes a while), the x86 images and their packs, the disc extracted from `orig/` into `build/disc`, then the Xbox host and the console's packs. From an empty `build/` it took 19 minutes at `-j8` (on top of GCC's own build the first time); a rebuild with nothing changed, under a minute. It needs no `make check`, which builds the matching images, a separate goal. A build of the Xbox port alone takes about 5.3 GB in `build/`, and GCC 1.2 GB in `tools/sh-elf`.
+
+Optional, for debugging:
+
+```sh
+make -j8 xbox-pc-test xbox-pc-test-link xbox-pc-test-host   # the x86 images' report, and the PC test host
+make xbox-pc-test-run   # the game on the PC test host, in a window
+sh xbox/test/all.sh     # the math tests, after make xbox: the port's C against the shipped SH-4 assembly, under qemu-sh4
+```
+
+- Expected: `make xbox` ends with `run.sh: build/xbox/iso/, 1.1G`, and prints `253 images linked; 0 over their areas` on the way. Each build also retries two objects that never compile for x86, the loader's `kmsurfac` workaround and `syCache`, which the port replaces: so `xbox-pc-test` reports `compiled 3356 of 3358 objects`. Each line of `xbox/test/all.sh` reports `0 real`.
+- The Xbox host builds with nxdk at `~/refs/nxdk` (`NXDK_DIR`); `xbox/host/xbox/run.sh` puts its `bin/` on `PATH` itself. It applies the port's pbkit patch, `xbox/third_party/nxdk-pbkit-lost-swap.patch`, to that checkout once. It clones nxdk-audio from https://github.com/Ryzee119/nxdk-audio to `~/refs/nxdk-audio` (`NXDK_AUDIO_DIR`) at the port's revision and applies `xbox/third_party/nxdk-audio-loop-start.patch` once.
 - On native Linux, run `build/xbox/sonic.iso` in a Linux build of xemu by hand: `run.sh`'s automated xemu runs drive the Windows xemu through PowerShell.
 - The PC host's keyboard: arrows the stick; I, J, K, L the d-pad; Z, X, A, S are A, B, X, Y; Q, W the triggers; Enter Start; Esc quits.
 
 ### Windows (WSL2)
 
-1. Install WSL2 (WSLg gives the PC host its window), then the packages of `dependencies.md` inside it.
-2. Work in the Linux file system (for example `~/sonic-adventure`), not under `/mnt/c`: the build is far slower on Windows' drives. Move a checkout with `tar`, which keeps executable bits.
-3. Build as under Linux above.
-4. **xemu runs:** put xemu for Windows in a folder of your own and set `XEMU_DIR` to its WSL path (for example `export XEMU_DIR=/mnt/c/Users/<you>/Tools/xemu`), with its BIOS, MCPX ROM and hard disk image. `xbox/host/xbox/run.sh SECONDS [KEY=VALUE...]` builds the host, packs an ISO, runs xemu, then prints the log and converts the shots to `build/xbox/shot_fN.png`. One run at a time.
-5. **A real Xbox:** copy `build/xbox/iso/` to `E:\SONICADV\` on a softmodded console (FTP the files newer than the console's). `default.xbe` and `modules.pak` are what a build changes.
+1. Install WSL2 with Ubuntu from an administrator PowerShell, `wsl --install -d Ubuntu`, and reboot. Current Windows 10 and 11 include WSLg, which gives the PC host its window: in Ubuntu, `echo $DISPLAY $WAYLAND_DISPLAY` should print `:0 wayland-0`.
+2. Inside Ubuntu, install the packages and tools of **Ubuntu** and **Then, on either** above. Windows itself needs nothing installed for the build.
+3. Work in the Linux file system (for example `~/sonic-adventure-xbox`), not under `/mnt/c`: the build is far slower on Windows' drives. Copy `orig/` in from Windows (`cp -r /mnt/c/...`). Move a checkout with `tar`, which keeps executable bits.
+4. Build as under Linux above.
+5. **xemu runs:** put xemu for Windows in a folder of your own and set `XEMU_DIR` to its WSL path (for example `export XEMU_DIR=/mnt/c/Users/<you>/Tools/xemu`), with its BIOS, MCPX ROM and hard disk image. `xbox/host/xbox/run.sh SECONDS [KEY=VALUE...]` builds the host, packs an ISO, runs xemu through Windows' `powershell.exe` (WSL's interop, on by default), then prints the log and converts the shots to `build/xbox/shot_fN.png`. One run at a time.
+6. **A real Xbox:** copy `build/xbox/iso/` to `E:\SONICADV\` on a softmodded console (FTP the files newer than the console's). `default.xbe` and `modules.pak` are what a build changes.
 
 ## Future plans
 

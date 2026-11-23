@@ -2769,22 +2769,34 @@ static DWORD __stdcall run_game(LPVOID unused)
             line = strchr(line, '\0') + 1;
         }
     }
-    /* HOST_60FPS=1: the experimental 60 frames a second (src/system/port.h's
-     * port_toggles[TOGGLE_FAST], which L, R and the d-pad's down flip in
-     * play): a stage's frame split into two pictures, in play only and where
-     * src/system/pace.c allows it. port_chosen[TOGGLE_FAST] marks it chosen,
-     * as the chord does: else a save's load (src/save/save.c's) puts back the
-     * save's own state, and the split went off with the first save loaded */
-    if (setting("HOST_60FPS") != NULL && strtoul(setting("HOST_60FPS"), NULL, 10) != 0) {
+    /* the port's toggles (src/system/port.h's port_toggles), which only
+     * host.txt sets on the Xbox: the pad's chord flips none (port_chord).
+     * HOST_WIDESCREEN: 16:9, the picture squeezed for a widescreen TV
+     * (TOGGLE_WIDE). 0 is 4:3; 1 16:9; 2, and a host.txt without the line,
+     * the dashboard's choice, the encoder's VIDEO_WIDESCREEN (letterbox is
+     * 4:3 here). 720p is 16:9 whatever it says (below). HOST_60FPS=1: the experimental 60 frames a second
+     * (TOGGLE_FAST), a stage's frame split into two pictures, in play only
+     * and where src/system/pace.c allows it. each is marked chosen, on or
+     * off: else a save's load (src/save/save.c's) puts back the save's own
+     * state */
+    {
         ULONG toggles = symbol_address(&main_symbols, "port_toggles");
         ULONG chosen = symbol_address(&main_symbols, "port_chosen");
+        int dashboard = (XVideoGetEncoderSettings() & VIDEO_WIDESCREEN) != 0;
+        unsigned long asked = setting("HOST_WIDESCREEN") != NULL ? strtoul(setting("HOST_WIDESCREEN"), NULL, 10) : 2;
+        int wide = asked == 2 ? dashboard : asked != 0;
+        int fast = setting("HOST_60FPS") != NULL && strtoul(setting("HOST_60FPS"), NULL, 10) != 0;
 
         if (toggles != 0 && chosen != 0) {
-            ((volatile int *)toggles)[2] = 1;
+            ((volatile int *)toggles)[1] = wide;
+            ((volatile int *)chosen)[1] = 1;
+            ((volatile int *)toggles)[2] = fast;
             ((volatile int *)chosen)[2] = 1;
         }
-        logf_("host: 60 frames a second %s\n",
-              toggles != 0 && chosen != 0 ? "on" : "asked for, but the images have no port_toggles or port_chosen");
+        logf_("host: 16:9 %s (HOST_WIDESCREEN=%lu; the dashboard's is %s), 60 frames a second %s%s\n",
+              wide ? "on" : "off", asked, dashboard ? "on" : "off",
+              fast ? "on" : "off",
+              toggles != 0 && chosen != 0 ? "" : ", but the images have no port_toggles or port_chosen");
     }
     /* the movies play where D:\movies.pak holds them. HOST_MOVIES=0, or no
      * pack, makes each end as it starts (movie.c's port_movie_skip) */
@@ -2869,8 +2881,8 @@ int main(void)
     have_sound = xbox_sound_open(sound_ram_kernel) == 0;
     have_video = setting("HOST_HEADLESS") == NULL && video_open() == 0;
     if (have_video && video_hd()) {
-        /* 720p's picture is 16:9: the port's own (port_toggles[TOGGLE_WIDE],
-         * which the overlay's switch still flips), drawn into the game's 640
+        /* 720p's picture is 16:9, whatever HOST_WIDESCREEN says: the port's
+         * own (port_toggles[TOGGLE_WIDE]), drawn into the game's 640
          * by 480 as for a TV that stretches it, which the host's scale to
          * 1280 by 720 does */
         ULONG toggles = symbol_address(&main_symbols, "port_toggles");

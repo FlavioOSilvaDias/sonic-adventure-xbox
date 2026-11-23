@@ -71,6 +71,12 @@ void port_curtain_advance(void)
 
 void port_chord(PDS_PERIPHERAL *pad)
 {
+#ifdef XBOX
+    /* the Xbox port sets its toggles from host.txt alone (HOST_WIDESCREEN,
+     * HOST_60FPS): the chord flips nothing, shows no readout, and the pad's
+     * triggers and d-pad reach the game as they are */
+    (void)pad;
+#else
     static const Uint32 buttons[TOGGLES] = {PDD_DGT_KU, PDD_DGT_KR, PDD_DGT_KD};
     Uint32 fresh;
     int i;
@@ -98,5 +104,6 @@ void port_chord(PDS_PERIPHERAL *pad)
         pad->press &= ~(CHORD | PAD_DIRECTIONS);
         pad->l = pad->r = 0;
     }
+#endif
 }
 #endif
