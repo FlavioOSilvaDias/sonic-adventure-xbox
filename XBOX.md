@@ -65,7 +65,7 @@ Features the Dreamcast version doesn't have:
 - **Right stick camera:** left and right turn the camera as the triggers do, past a 20% dead zone; up and down do nothing.
 - **Analog dead zone** on the left stick (12% by default, `HOST_DEADZONE=PERCENT`), as the Xbox joystick tends to drift more than the DC's.
 - **Bloom** in stages and fields (`HOST_BLOOM`, `HOST_BLOOM_THRESHOLD`).
-- **On-screen performance overlay** (`HOST_OVERLAY`, on by default) and **reports** on the pad's Back button (see Debug flags).
+- **On-screen performance overlay** (`HOST_OVERLAY=1`, off by default) and **reports** on the pad's Back button (see Debug flags).
 - **Return to the dashboard:** both triggers with Start and Back.
 
 ## Known issues
@@ -139,7 +139,7 @@ The watch (on whenever reports are): logs frames in play that draw under four fi
 | `HOST_VSYNC=0` | doesn't wait for the blank: the clock's blanks instead of the display's |
 | `HOST_BLOOM=PERCENT`, `HOST_BLOOM_THRESHOLD=PERCENT` | the bloom's strength (40, 0 for none) and threshold (75) |
 | `HOST_DEADZONE=PERCENT` | the left stick's dead zone (12) |
-| `HOST_OVERLAY=0` | no on-screen figures |
+| `HOST_OVERLAY=1` | the on-screen figures (off by default) |
 
 ## Building
 

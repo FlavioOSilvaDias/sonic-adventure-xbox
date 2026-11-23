@@ -124,7 +124,7 @@ ln -f xbox/host/xbox/bin/default.xbe build/xbox/textures.pak build/xbox/sounds.p
     # (HOST_REPORT), and a fault, a halt or a stall writes the log
     # (HOST_CRASH_LOG). HOST_PROFILE=1 and HOST_LOG_FILE=1 bring back the
     # profile every 600 blanks, written every 10 seconds. the host shows the
-    # port's figures on the screen itself, unless HOST_OVERLAY=0
+    # port's figures on the screen itself where HOST_OVERLAY=1
     if [ "$stage" = build/xbox/iso ]; then
         for default in HOST_PROFILE=0 HOST_LOG_FILE=0 HOST_REPORT=1 HOST_CRASH_LOG=1; do
             printf '%s\n' "$@" | grep -q "^${default%%=*}=" || echo "$default"

@@ -2745,11 +2745,11 @@ static DWORD __stdcall run_game(LPVOID unused)
               report_on ? "on" : "off", crash_log ? "on" : "off", log_file ? "on" : "off");
     }
     /* the port's figures on the screen (port.h's port_overlay) */
-    /* on unless HOST_OVERLAY=0, so that a host.txt without the line, or
-     * none, still shows them */
+    /* off unless HOST_OVERLAY=1, so that a host.txt without the line, or
+     * none, shows the game's picture alone */
     {
         ULONG overlay = symbol_address(&main_symbols, "port_overlay");
-        int on = setting("HOST_OVERLAY") == NULL || strtoul(setting("HOST_OVERLAY"), NULL, 10) != 0;
+        int on = setting("HOST_OVERLAY") != NULL && strtoul(setting("HOST_OVERLAY"), NULL, 10) != 0;
 
         if (overlay != 0) {
             *(volatile int *)overlay = on;
