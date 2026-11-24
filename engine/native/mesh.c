@@ -62,10 +62,11 @@ static struct {
  * first polygon through null, and polygon_find_floor's skip can step past a
  * short mesh's last. the console reads the bottom of its memory there. a
  * host's read of null ends the game. so a mesh that leaves the pool none to
- * lend ends at end_polygon, and an empty one is end_polygon alone. its
- * center lies past every window's end, so a walk by centers stops at it.
- * its corners are one point, so a walk of the whole list takes no surface
- * from it. a mesh the pool served whole ends in null as before */
+ * lend ends at end_polygon, and an empty one is end_polygon alone. the
+ * translated floor search reads one center past its last candidate, so the
+ * terminator lies beyond every finite window. its corners are one point, so
+ * a walk of the whole list takes no surface from it. last still names the
+ * last real polygon so freeing the mesh unlinks it */
 static struct polygon end_polygon = {.center = {INFINITY, INFINITY, INFINITY}};
 
 #define LIST_MARK                                                              \
@@ -99,7 +100,7 @@ struct collision_mesh *collision_mesh_alloc(void)
 {
     struct collision_mesh *mesh = free_meshes;
 
-    if (!mesh->next) {
+    if (!mesh) {
         return NULL;
     }
     free_meshes = mesh->next;
@@ -143,7 +144,7 @@ static struct polygon *take_polygon(struct polygon * P32 * first,
     }
     free_polygons = polygon->next;
     polygon->next = *first;
-    if (*first) {
+    if (*first && *first != &end_polygon) {
         (*first)->prev = polygon;
     } else {
         *last = polygon;
@@ -155,6 +156,9 @@ static struct polygon *take_polygon(struct polygon * P32 * first,
 
 struct polygon *collision_mesh_add_polygon(struct collision_mesh *mesh)
 {
+    if (!mesh->polygons) {
+        mesh->polygons = mesh->last = &end_polygon;
+    }
     return take_polygon(&mesh->polygons, &mesh->last);
 }
 
@@ -193,12 +197,10 @@ void collision_mesh_take_buckets(struct collision_mesh *mesh)
             }
         }
     }
-    mesh->last = last;
-    if (!free_polygons->next) {
-        if (last) {
-            last->next = &end_polygon;
-        } else {
-            mesh->polygons = mesh->last = &end_polygon;
-        }
+    if (last) {
+        last->next = &end_polygon;
+        mesh->last = last;
+    } else {
+        mesh->polygons = mesh->last = &end_polygon;
     }
 }
