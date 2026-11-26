@@ -76,3 +76,10 @@ struct sh4_sincos port_sincos16(unsigned short angle)
 {
     return test_sincos16(angle);
 }
+
+/* the exact models (xbox/port/fpu.c), which sh4.h's models call where
+ * port_fpu asks: the x86 run leaves port_fpu at 0, the tests' models, so
+ * they link but never run. the SH-4 side, which takes no XBOX, has none */
+#ifdef XBOX
+#include "xbox/port/fpu.c"
+#endif

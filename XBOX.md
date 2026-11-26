@@ -28,6 +28,7 @@ Checks that must keep passing:
 - `make check`: "4309 files match SHA256SUMS".
 - `xbox/test/all.sh`: 22 SH-4 translation tests, 0 real differences (a zero's sign and a NaN's bits don't count).
 - `xbox/test/sh4_sse.sh`: the x87 FIPR and FTRV against the C they replaced, 0 differences.
+- `xbox/test/fpu_exact.sh`: the exact FPU models (`HOST_FPU_*=1`) through the port's dispatch against the console's, "fpu_exact: 0 real". It also prints how often the port's own models differ from the console's, and each model's cost.
 - Docs: `git add -N XBOX.md && PYTHONPATH=tools:tests python3 -m unittest tests.test_docs; git reset -q XBOX.md`
 
 ## What has been implemented
@@ -48,8 +49,8 @@ Checks that must keep passing:
 - **Images:** each image is linked for i386 at its console address by `tools/pclink.py` from make dc's link spec. Data keeps its RAM address; code goes to code areas past `0x10000000`. An overlay's unbound name binds to 1ST_READ.BIN's, the port's XMTRX among them (`sh4_xmtrx`, one for the game, as the console's one register).
 - **Memory:** the port's RAM is area 3, the console's 16 MB then the port layer's own memory, visible at `0x0c000000`, `0x8c000000`, `0xac000000` and the store queues' `0xe0000000`.
 - **`struct host_api`** (`xbox/port/host.h`) is the line between the shared port and the two hosts: files, time, the blank, pads, cards, video, AICA registers, stats.
-- **Floats:** SSE single precision in the SH-4's mode (rounding toward zero, flush to zero, denormals as zero), set by each host before `main`; the x87 at 53 bits and rounding toward zero for FIPR's and FTRV's double sums, as Flycast computes them. FSRRA is exact here; FSCA uses the console's own table.
-- **`xbox/include/sh4.h`:** the port's XMTRX and its models of FIPR, FTRV, FSRRA, FSCA, FTRC and FMAC. `ninja.h` includes it under `XBOX` in place of `ninja_zam.h`. FIPR and FTRV are x87 asm in `xbox/include/sse/sh4_sse.h`, bit-identical to the C they replaced.
+- **Floats:** SSE single precision in the SH-4's mode (rounding toward zero, flush to zero, denormals as zero), set by each host before `main`; the x87 at 53 bits and rounding toward zero for the doubles of the port's own FIPR and FTRV and of its FMAC. In play, FIPR, FTRV, FSRRA, FSCA and SHC's fused products are the console's bit for bit by default, and drawing takes the port's own; the `HOST_FPU_*` settings choose each instruction's model ([SH-4 FPU models](#sh-4-fpu-models)).
+- **`xbox/include/sh4.h`:** the port's XMTRX and its models of FIPR, FTRV, FSRRA, FSCA, FTRC and FMAC. `ninja.h` includes it under `XBOX` in place of `ninja_zam.h`. FIPR and FTRV are x87 asm in `xbox/include/sse/sh4_sse.h`, bit-identical to the C they replaced. Each of FIPR, FTRV, FSRRA and FSCA tests `port_fpu` first, and calls `xbox/port/fpu.c`'s exact model where it's 1.
 - **The blank** interrupts the game's thread through the port's interrupt entry, as the console's does; the game's speed follows the SH-4's timer, which the port models. On the Xbox the host breaks in from the kernel's clock interrupt, wherever the game is; its trampoline saves the x87/SSE state (FXSAVE) before its own chores, whose sound emulation computes in those registers. Without that, the game resumed on the chores' values, and objects and land pieces dropped out for a frame on the console alone. Host code at interrupt level must not touch x87/SSE outside that save.
 
 ## Target resolution
@@ -117,7 +118,7 @@ Scripting and capture:
 | --- | --- |
 | `HOST_CLOCK=frames` | pads, shots, pokes and quit count rendered frames, not blanks |
 | `HOST_PADS=600:8,610:0,2400:0/128/0` | scripts controller A: `PDD_DGT_` bits in hex, optional `/X/Y` stick |
-| `HOST_POKE=300:menu_state+0:1:1` | writes a 1ST_READ.BIN variable at a blank (this one opens every stage); a report's `port_place` line restarts at its place |
+| `HOST_POKE=300:menu_state+0:1:1` | writes a 1ST_READ.BIN variable at a blank, as `BLANK:SYMBOL+OFFSET:VALUE:SIZE`, the size in bytes (1, 2 or 4, the default), comma-separated for more (this one writes 1 to one byte and opens every stage); a report's `port_place` line restarts at its place |
 | `HOST_SHOT=F,...` | saves those frames (`build/pc/shot_N.ppm` on the PC, PNGs from xemu) |
 | `HOST_QUIT=N` | quits at blank or frame N |
 | `HOST_HEADLESS=1`, `HOST_SCALE=2`, `HOST_SLOW=3` | no window, a doubled window, console time three times slower (PC) |
@@ -128,6 +129,26 @@ Scripting and capture:
 Pokes of note: `port_movie_skip+0:1`, `port_overlay+0:1`, `port_profile+0:1`, `port_report+0:1`, `port_gpu_models+0:N`, `port_sweep_cap+0:1` (widen far collision sweeps), `port_sort_triangles+0:N` (the translucent sort: 0 by strip, 1 by a triangle's nearest vertex, 2 by its middle).
 
 The watch (on whenever reports are): logs frames in play that draw under four fifths of the strips or models of both frames beside them, with the models missing; and dumps player 0's last 32 frames and makes a report when its place or speed leaves all reason.
+
+### SH-4 FPU models
+
+The port's FIPR, FTRV, FSRRA and FSCA are close to the console's, not identical, and the Pentium III has no fused multiply-add for SHC's FMACs. `xbox/third_party/sh4_fpu_approx/` holds bit-exact models of the four (MIT, by skmp: [write-up](https://drk.emudev.org/blog/sh4-fpu/), measured against a Dreamcast), and `xbox/port/fpu.c`'s `port_fmac` gives the console's FMAC, as upstream's play math does (`sa_fmac`). Each setting picks one instruction's model: `0` keeps the port's own; `1`, the default for all five, takes the console's, in the game's FPSCR (rounding toward zero, denormals as zero).
+
+| Setting (default) | `0` | `1` |
+| --- | --- | --- |
+| `HOST_FPU_FIPR` (1) | Flycast's: the products as doubles on the x87, rounded once | the console's: 28-bit truncated Booth products, aligned by truncation, rounded once |
+| `HOST_FPU_FTRV` (1) | as FIPR's, four times | the console's, four of its FIPRs |
+| `HOST_FPU_FSRRA` (1) | an exact `1 / sqrt` | the console's estimate (within 2 ulp) |
+| `HOST_FPU_FSCA` (1) | Flycast's table of the console's results, rounded to nearest | the console's, rounded toward zero as the game runs |
+| `HOST_FPU_FMAC` (1) | the product and the sum rounded apart | the console's FMAC: rounded once, denormals as zero |
+
+- **Play and picture:** the settings choose the models for play, the math a game step reads (movement, collision, cameras, animation, objects), as upstream's `ENGINE.md` parts it. Drawing takes the port's own models whatever they say: `sh4.h`'s `_picture` models, in `xbox/engine/batch.h` and `xbox/engine/sa1/model.c`, the sprites' and easy models' transforms (`zam_xbox.h`), the Xbox sides of `njModel.c`'s and `njModelS.c`'s facing tests and lighting, and `tools/sh2c.py --picture`'s translations of `njModel`, `njModelS` and `njLtSrcs`, whose bodies the native game never runs. A call that names no `_picture` model is play's, so the exact models cost only what the game's steps compute, not every vertex.
+- **The fused products:** for each R26 or R32 object, `pc.mk` compiles the float pass's `.i` to LLVM IR with contraction on, before any optimization, and `tools/pcfmac.py` turns each multiply-add clang contracted into a call of `port_fmac`. The float pass leaves just the products SHC fuses for a compiler to contract, as `make dc`'s GCC does. Counting each 1ST_READ.BIN function's FMACs against the shipped image, the x86 build fuses as SHC does in 419 of 483 functions, `make dc` in 398; the rest are where the float pass's model of SHC's fusion stops (`tools/float_fuse.py`). Without it, 14% of multiply-adds came out otherwise than the console's FMAC, mostly by 1 ulp.
+- **Flipping them while the game runs:** click both sticks (the PC host: or F8). Each instruction whose model is exact at the start, by its setting or by default, flips between its exact model and the port's, so the chord compares just those. With none exact, all five flip together. The overlay (`HOST_OVERLAY=1`) lists the five models under its figures, exact in cyan; without it, they show for 60 rendered frames after each flip. The log names the models at the start and at each flip.
+- **How far the port's own are**, by `xbox/test/fpu_exact.sh`: FSCA's table differs from the console in 29% of results (1 ulp; the table is the console's rounding to nearest, and the game rounds toward zero). FSRRA's differs in 51% (up to 3 ulp). FIPR and FTRV differ in about 8% of random vectors, nearly all by 1 ulp. The rest are mostly a denormal operand, which the console (denormals as zero) takes as 0 and the x87 doesn't. The test also checks the exact models against play math's console build (`engine/numeric/`), and the drawers' models against the port's own.
+- **Cost**, in cycles a call on a PC (`fpu_exact.sh` prints them), with `fpu.c` and `math.c` at `-O2` (`PC_PORT_HOT`): the exact FSRRA about 16 times the port's, FIPR 30 times, FTRV and FSCA 60 to 70 times, FMAC about 17 cycles a fused product. The models run in 64-bit integers, which the Pentium III does slowly; play calls them per object and step, the drawers not at all.
+- **A NaN's bits:** a console NaN (`0x7fbfffff`) returns from a model as x86's quiet NaN (`0x7fffffff`), as every NaN of the port's does. It is still a NaN.
+- **Not covered:** the demos also depend on how many steps each frame takes. A frame of play takes an extra step when the Dreamcast runs slow (`stage_run_action`'s `ACTION_LIMIT`), and the Xbox doesn't run slow, so a demo recorded over the console's slowdown (Tails in Ice Cap) may still part from the Dreamcast's.
 
 ## Experimental flags
 
@@ -419,7 +440,7 @@ The tree is upstream's 6e5a40e (reshaped/sonic-adventure), merged on 2026-11-20 
 
 - **Shipped sides:** `polygon.c`'s console rewrites (`engine/tools/marks.py`'s `CONSOLE`, by `tools/pcconsole.py`) take their shipped side, as upstream's native game does.
 - **The drawer:** every one of upstream's live draws (`sa_present_live`'s formats) goes to the renderer as a run, the host's own vertices, rather than as the tile accelerator's in Kamui's lists; the lists keep each draw's header and the run's mark, in the draws' order (`xbox/engine/sa1/emit.h`). Models draw through upstream's layer, `src/draw/model.c`, into the port's walk, `xbox/engine/sa1/model.c`, the old make gcc drawer with its GPU path, which projects and clips on the CPU what the NV2A can't take whole. Sprites, screen polygons, 2D polygons and lines, 3D lines and easy models run upstream's sends unchanged, through thin wrappers in `xbox/engine/sa1/` and `xbox/engine/sa1/strip.h`, with small `XBOX` branches in `engine/dc/sa1/sprite.h`, `engine/dc/sa1/easy.h` and `engine/dc/njsprite.h`; the easy models' kernel is `xbox/engine/batch.h`'s C. Ninja's print is one run a print (`sdk/ninja/njDebug.c`). `xbox/engine/` comes before `engine/dc/` on the include path, so a header there takes the place of the Dreamcast's. Still in the lists: Ninja's own draws outside those formats, as `njDrawTriangle3D` and `njDrawPolygon3D`, a few dozen vertices a frame in the demos.
-- **SH4ZAM:** the Dreamcast engine's sprites and screen polygons run SH4ZAM's software back end, on the port's XMTRX (`xbox/port/xmtrx.c`), with `xbox/include/zam_xbox.h` in place of `ninja_zam.h`'s helpers.
+- **No SH4ZAM:** the Xbox build takes none of the Dreamcast's SH4ZAM, and no include path holds its headers (`config/pc.mk`), so a source that reaches one fails to compile. `xbox/include/zam_xbox.h` takes the place of `ninja_zam.h`'s helpers, on the port's FIPR, FTRV, FSRRA and FSCA (`sh4.h`). The Dreamcast engine's shared drawers (`engine/dc/sa1/`, `njModel.c`) take `xbox/include/vec_xbox.h` under `XBOX`: SH4ZAM's vector types, initializers and prefetch, defined by the port with their x86 layout. Their two SH4ZAM transforms, a sprite's FTRV and the easy models' turned light, run on the port's FTRV and FIPRs (`zam_xmtrx_point3`, `zam_xmtrx_turn3_transpose`), as the native game runs them on play math. `make dc` keeps SH4ZAM.
 - **Left out:** `engine/dc/owner.c` (the port's Kamui owns the frame) and `engine/dc/crash.c` (`port_stop` logs and exits).
 - **Not yet re-applied:** the port's split-frame view fix (a far sai, the amenbo's start step) on upstream's reworked `present.c`; re-apply it if those return.
 

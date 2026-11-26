@@ -20,6 +20,9 @@ void video_draw(const struct host_draw *draw, const unsigned short *indices, int
 void video_present(void);
 void video_fog(unsigned table_color, unsigned vertex_color, float density, const unsigned short table[128]);
 unsigned video_keys(void);
+/* whether both of the pad's sticks are clicked, or F8 is down: the SH-4
+ * FPU models' chord (host.h's host_fpu_flip) */
+int video_fpu_chord(void);
 /* the keyboard's stick and triggers, where a key moves them */
 void video_stick(int *x, int *y, int *l, int *r);
 int video_quit(void);

@@ -5,7 +5,7 @@
 #include <machine.h>
 #include <ninja.h>
 #include <sg_xpt.h>
-#if defined(DREAMCAST) || defined(XBOX)
+#ifdef DREAMCAST
 #ifdef NONMATCHING
 #include <sh4zam/shz_mem.h>
 #include <sh4zam/shz_vector.h>
@@ -2770,10 +2770,10 @@ static void prefetch_vertex_tail(void)
  * the fourth term is 0. the shipped body's is NaN for an infinity or a NaN in
  * FR7 */
 #ifdef XBOX
-/* the port's FIPR (xbox/include/sh4.h) */
+/* the port's FIPR for a drawer (xbox/include/sh4.h) */
 ALWAYS_INLINE Float view_point_normal_dot(NJS_POINT3 *point, NJS_VECTOR *normal)
 {
-    return sh4_fipr(normal->x, normal->y, normal->z, 0.0F, point->x, point->y,
+    return sh4_fipr_picture(normal->x, normal->y, normal->z, 0.0F, point->x, point->y,
                     point->z, 0.0F);
 }
 #else
@@ -2892,7 +2892,7 @@ ALWAYS_INLINE Float view_triangle_facing(NJS_POINT3 *b, NJS_POINT3 *a,
     Float cross_z = b->y * a->x - b->x * a->y;
     Float cross_x = b->z * a->y - b->y * a->z;
 
-    return sh4_fipr(c->y, c->z, c->x, 0.0F, cross_y, cross_z, cross_x, 0.0F);
+    return sh4_fipr_picture(c->y, c->z, c->x, 0.0F, cross_y, cross_z, cross_x, 0.0F);
 }
 #else
 ALWAYS_INLINE Float view_triangle_facing(NJS_POINT3 *b, NJS_POINT3 *a,

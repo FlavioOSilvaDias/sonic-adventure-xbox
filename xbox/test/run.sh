@@ -92,7 +92,7 @@ done
 # translation's. the port's C is make pc's
 resource=$($cc -print-resource-dir)/include
 flags="--target=i386-linux-gnu -msse2 -mfpmath=sse -std=gnu17 -ffreestanding -fno-builtin -nostdinc
-    -isystem $resource -isystem tools/sh4zam/include -DNONMATCHING -DXBOX -DNDEBUG -D__CLANG_MAX_ALIGN_T_DEFINED -DSHZ_TLS_MODEL=SHZ_TLS_DISABLED
+    -isystem $resource -DNONMATCHING -DXBOX -DNDEBUG -D__CLANG_MAX_ALIGN_T_DEFINED
     -U__clang__ -fgnuc-version=4.2.1 -fpack-struct=4 -fno-strict-aliasing -fwrapv -frounding-math -fno-math-errno
     -ffp-contract=off -w -O2 -Isdk/include -Isrc -I."
 objects=

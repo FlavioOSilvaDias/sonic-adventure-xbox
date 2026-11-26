@@ -47,10 +47,19 @@ static float table_sin(unsigned angle)
  * game does; xbox/test/libm.c sets it for the tests' float sums */
 int sh4_test_sums;
 
+/* HOST_FPU_FSCA=1 takes the exact model (xbox/port/fpu.c) instead. the
+ * table holds the console's results rounded to nearest, and the game rounds
+ * toward zero: under it, 38,056 of the 131,072 sines and cosines are one
+ * unit of the last place further from 0 than the console's, and it gives
+ * +0 for the sine at 0x8000 and the cosine at 0x4000, where the table's -0 */
 struct sh4_sincos port_sincos16(unsigned short angle)
 {
     struct sh4_sincos pair;
 
+    if (port_fpu[SH4_FPU_FSCA]) {
+        port_fsca_exact(angle, &pair.sin, &pair.cos);
+        return pair;
+    }
     pair.sin = table_sin(angle);
     pair.cos = table_sin(angle + 0x4000u);
     return pair;

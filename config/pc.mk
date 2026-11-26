@@ -23,12 +23,10 @@ PC_TARGET += -std=gnu17
 # Clang reads no host header and takes no library function for a builtin, as
 # nxdk compiles: its C library comes from nxdk, and later from the port
 PC_TARGET += -ffreestanding -fno-builtin -nostdinc -isystem $(PC_RESOURCE)
-# SH4ZAM's headers, as make dc's GCC_TARGET gives them, for the Dreamcast
-# engine's drawers, which run its software back end on x86 (sdk/include/zam.h)
-PC_TARGET += -isystem tools/sh4zam/include
-# its XMTRX is the port's, one for the game (xbox/port/xmtrx.c), so it keeps
-# none per thread, and takes no pthreads, which nxdk lacks
-PC_TARGET += -DSHZ_TLS_MODEL=SHZ_TLS_DISABLED
+# No SH4ZAM, the Dreamcast's math library, which make dc's GCC_TARGET gives
+# its drawers: no include path holds its headers, so a source that reaches
+# one fails to compile. The Dreamcast engine's drawers take the port's
+# vectors (xbox/include/vec_xbox.h) and models (xbox/include/sh4.h)
 # Each object keeps DWARF, which tools can read as make dc's read its
 PC_TARGET += -g -gdwarf-4 $(call quoted,-fdebug-prefix-map=$(CURDIR)=.)
 # NONMATCHING's guards hold the ports' side of the C, so the x86 build takes
@@ -77,6 +75,10 @@ PC_PORT_HOT := xbox/port/render.c
 # and its movie player, whose file holds pl_mpeg's decoder: its IDCT, motion
 # compensation and bitstream reads run per pixel, each movie frame
 PC_PORT_HOT += xbox/port/movie.c
+# and the SH-4 FPU's models, which play calls for each FIPR, FTRV, FSRRA,
+# FSCA and fused product (xbox/port/fpu.c's exact models and FMAC, and
+# math.c's FSCA): -O2 inlines and unrolls the exact models' multiplier array
+PC_PORT_HOT += xbox/port/fpu.c xbox/port/math.c
 PC_OPTIMIZE = $(if $(filter $(GCC_HOT) $(PC_PORT_HOT),$<),-O2,-Os)
 PCFLAGS = $(PC_TARGET) $(PC_OPTIMIZE) $(PC_ZEROS_IN_DATA) $(PC_AS_SHC) $(PC_LAYOUT) $(PC_WARNINGS)
 
@@ -96,8 +98,13 @@ PC_SH2C := sdk/ninja/njLtSrcs.c sdk/ninja/njSetCamera.c sdk/ninja/njSetCameraAng
 # under XBOX, which their bodies share. they load QACR0's address, 0xff000038,
 # which is port_qacr's under XBOX (xbox/port/system.c)
 SH2C_QACR := --literal "H'FF000038=&port_qacr[0]" --declare 'extern volatile Uint32 port_qacr[2];'
-SH2C_sdk/ninja/njModel.c := --global R8=queue_cursor --declare 'extern Float _nj_vertex_offset_;' $(SH2C_QACR)
-SH2C_sdk/ninja/njModelS.c := --global R8=sq_cursor --declare 'extern Float _nj_vertex_offset_;' $(SH2C_QACR)
+# Ninja's model drawers and its lights only draw: the native game (make pc)
+# runs none of their bodies (engine/mk/native.mk compiles neither njModel.c
+# nor njLtSrcs.c, nor translates njModelS.c's bodies), so no step reads what
+# they compute. --picture gives them the port's own FIPR, FTRV and FSRRA,
+# where play takes the console's (xbox/include/sh4.h)
+SH2C_sdk/ninja/njModel.c := --picture --global R8=queue_cursor --declare 'extern Float _nj_vertex_offset_;' $(SH2C_QACR)
+SH2C_sdk/ninja/njModelS.c := --picture --global R8=sq_cursor --declare 'extern Float _nj_vertex_offset_;' $(SH2C_QACR)
 # the calls Ninja's bodies make, by SHC's convention: R4 to R7 and FR4 on,
 # and FR0 for a Float. each names its callee in parentheses, so that it
 # reaches the function, as the bodies' JSRs do, and not a macro of its name
@@ -118,7 +125,7 @@ SH2C_sdk/ninja/njSetCamera.c := $(SH2C_NINJA_CALLS)
 SH2C_sdk/ninja/njSetCameraAngle.c := $(SH2C_NINJA_CALLS)
 SH2C_sdk/ninja/njPointCamereInterest.c := $(SH2C_NINJA_CALLS)
 SH2C_sdk/ninja/njRollCameraInterest.c := $(SH2C_NINJA_CALLS)
-SH2C_sdk/ninja/njLtSrcs.c := --declare 'extern const Float fpow_tbl[17][256];' \
+SH2C_sdk/ninja/njLtSrcs.c := --picture --declare 'extern const Float fpow_tbl[17][256];' \
 	--call '_lt_power=FR0 = lt_power(FR4, (Int)R4)' \
 	--dynamic '((void (*)(Uint32, Uint32, Uint32, Uint32))CALLEE)(R4, R5, R6, R7)'
 

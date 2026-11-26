@@ -618,6 +618,11 @@ KMSTATUS kmRender(void)
      * lists' ends are taken */
     if (port_overlay) {
         port_overlay_draw();
+    } else if (port_fpu_note > 0) {
+        port_fpu_draw();
+    }
+    if (port_fpu_note > 0) {
+        port_fpu_note--;
     }
     for (k = 0; k < LISTS; k++) {
         static int overflowed;

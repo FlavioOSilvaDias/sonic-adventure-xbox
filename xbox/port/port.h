@@ -80,6 +80,12 @@ struct port_shown {
 };
 extern struct port_shown port_shown;
 void port_overlay_draw(void);
+/* the SH-4 FPU models' names, the port's or the exact (xbox/port/fpu.c's
+ * port_fpu), under the figures: with them, and alone for the frames
+ * port_fpu_note counts after the pad's chord flips them (host.h) */
+extern int port_fpu[5];
+extern volatile int port_fpu_note;
+void port_fpu_draw(void);
 /* the game's drawer sends the models it can to the host untransformed
  * (gcc/src/draw/model.c): bit 0 their opaque meshsets, bit 1 their
  * translucent ones too; 0 turns it off */

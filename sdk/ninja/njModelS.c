@@ -990,8 +990,9 @@ ALWAYS_INLINE void NJM_SET_POLY_STRIP(struct calc_vertex *vertex, Uint32 pcw)
 #ifdef XBOX
     /* the port's FIPR (xbox/include/sh4.h) */
     Float intensity =
-        iamb - sh4_fipr(vertex->normal.x, vertex->normal.y, vertex->normal.z,
-                        0.0F, light2.x, light2.y, light2.z, 0.0F);
+        iamb - sh4_fipr_picture(vertex->normal.x, vertex->normal.y,
+                                vertex->normal.z, 0.0F, light2.x, light2.y,
+                                light2.z, 0.0F);
 #else
     Float intensity =
         iamb - zam_fipr(shz_vec4_init(vertex->normal.x, vertex->normal.y,
@@ -1097,8 +1098,9 @@ ALWAYS_INLINE void _NJM_SET_TEX_STRIP(struct calc_vertex *vertex, Uint32 pcw,
 #ifdef XBOX
     send_textured(
         vertex, pcw, (Float)uv->u * TEX_SCALE, (Float)uv->v * TEX_SCALE,
-        iamb - sh4_fipr(light2.x, light2.y, light2.z, 0.0F, vertex->normal.x,
-                        vertex->normal.y, vertex->normal.z, 0.0F));
+        iamb - sh4_fipr_picture(light2.x, light2.y, light2.z, 0.0F,
+                                vertex->normal.x, vertex->normal.y,
+                                vertex->normal.z, 0.0F));
 #else
     send_textured(
         vertex, pcw, (Float)uv->u * TEX_SCALE, (Float)uv->v * TEX_SCALE,
@@ -1212,7 +1214,7 @@ ALWAYS_INLINE void NJM_SET_ENV_STRIP(struct calc_vertex *vertex, Uint32 pcw)
     /* the shipped FTRV, by the port's XMTRX (xbox/include/sh4.h) */
     NJS_POINT3 mapped;
 
-    sh4_xmtrx_apply3(&vertex->normal, 1.0F, &mapped);
+    sh4_xmtrx_apply3_picture(&vertex->normal, 1.0F, &mapped);
 #else
     shz_vec3_t mapped =
         shz_xmtrx_transform_point3(zam_load_vec3(&vertex->normal));
@@ -1260,7 +1262,7 @@ ALWAYS_INLINE void NJM_SET_ENV_X_STRIP(struct calc_vertex *vertex, Uint32 pcw)
 #ifdef XBOX
     NJS_POINT3 mapped;
 
-    sh4_xmtrx_apply3(&vertex->normal, 1.0F, &mapped);
+    sh4_xmtrx_apply3_picture(&vertex->normal, 1.0F, &mapped);
 #else
     shz_vec3_t mapped =
         shz_xmtrx_transform_point3(zam_load_vec3(&vertex->normal));

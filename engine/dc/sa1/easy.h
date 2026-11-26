@@ -27,8 +27,13 @@
 #include <machine.h>
 #include <ninja.h>
 #include <sg_xpt.h>
+#ifdef XBOX
+/* the Xbox port takes no SH4ZAM: the port's vectors and prefetch */
+#include "xbox/include/vec_xbox.h"
+#else
 #include <sh4zam/shz_mem.h>
 #include <sh4zam/shz_vector.h>
+#endif
 
 #include "batch.h"
 #include "rules.h"
@@ -110,8 +115,16 @@ struct sa1_live_easy {
 static __attribute__((noinline)) int
 easy_project(const NJS_MODEL *model, const struct sa1_live_easy *state)
 {
+#ifdef XBOX
+    /* the port's three FIPRs, as njModelE.c's shipped body runs them
+     * (xbox/include/zam_xbox.h), where SH4ZAM's software back end would sum
+     * the products as floats */
+    shz_vec3_t turned = zam_xmtrx_turn3_transpose(
+        shz_vec3_init(state->light.x, state->light.y, state->light.z));
+#else
     shz_vec3_t turned = shz_xmtrx_transform_vec3_transpose(
         shz_vec3_init(state->light.x, state->light.y, state->light.z));
+#endif
     Float diffuse = state->negative_diffuse;
 
     return zam_xmtrx_project_lit_points(

@@ -117,10 +117,12 @@ ALWAYS_INLINE draw_vec4 draw_vec4_init(Float x, Float y, Float z, Float w)
     return v;
 }
 
-/* FTRV XMTRX of v */
+/* FTRV XMTRX of v. the walk draws alone (src/draw/model.c's draw_in_view,
+ * which play reads, runs Ninja's njCalcPoint), so its FTRV and FIPR are a
+ * drawer's (xbox/include/sh4.h's _picture models) */
 ALWAYS_INLINE draw_vec4 draw_xmtrx_vec4(draw_vec4 v)
 {
-    sh4_xmtrx_ftrv(&v.x, &v.x);
+    sh4_xmtrx_ftrv_picture(&v.x, &v.x);
     return v;
 }
 
@@ -145,7 +147,7 @@ ALWAYS_INLINE draw_vec3 draw_xmtrx_vec3(const NJS_VECTOR *n)
 /* FIPR of a and b, a first */
 ALWAYS_INLINE Float draw_fipr(draw_vec4 a, draw_vec4 b)
 {
-    return sh4_fipr(a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w);
+    return sh4_fipr_picture(a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w);
 }
 
 /* two FIPRs of l, with r1 and with r2 */

@@ -510,6 +510,43 @@ static unsigned scripted_buttons(int *x, int *y)
     return buttons;
 }
 
+/* the SH-4 FPU models (host.h's host_fpu_): the game's port_fpu and
+ * port_fpu_note, or null in images older than them, and the settings'
+ * values, which the chord flips against */
+static volatile int *fpu_models;
+static volatile int *fpu_note;
+static int fpu_chosen[HOST_FPU_INSTRUCTIONS];
+
+static void fpu_log(const char *why)
+{
+    fprintf(stderr, "host: SH-4 FPU models in play%s: FIPR %s, FTRV %s, FSRRA %s, FSCA %s, FMAC %s\n", why,
+            fpu_models[0] ? "exact" : "port", fpu_models[1] ? "exact" : "port", fpu_models[2] ? "exact" : "port",
+            fpu_models[3] ? "exact" : "port", fpu_models[4] ? "exact" : "port");
+}
+
+/* both sticks clicked, or F8, fresh: the models flip (host_fpu_flip) */
+static void fpu_chord(int clicked)
+{
+    static int clicked_was;
+    int models[HOST_FPU_INSTRUCTIONS];
+    int k;
+
+    if (clicked && !clicked_was && fpu_models != NULL) {
+        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
+            models[k] = fpu_models[k];
+        }
+        host_fpu_flip(fpu_chosen, models);
+        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
+            fpu_models[k] = models[k];
+        }
+        if (fpu_note != NULL) {
+            *fpu_note = HOST_FPU_NOTE_FRAMES;
+        }
+        fpu_log(", flipped by the chord");
+    }
+    clicked_was = clicked;
+}
+
 static unsigned host_pad_read(int port, int *x, int *y, int *l, int *r)
 {
     unsigned buttons;
@@ -523,6 +560,7 @@ static unsigned host_pad_read(int port, int *x, int *y, int *l, int *r)
     if (have_video) {
         buttons |= video_keys();
         video_stick(x, y, l, r);
+        fpu_chord(video_fpu_chord());
     }
     return buttons;
 }
@@ -1263,6 +1301,27 @@ int main(int argc, char **argv)
         if (frame_clock == NULL) {
             fprintf(stderr, "host: HOST_CLOCK=frames, but 1st_read has no _nj_vsync_count_\n");
             return 1;
+        }
+    }
+    /* the SH-4 FPU models, HOST_FPU_FIPR, HOST_FPU_FTRV, HOST_FPU_FSRRA
+     * and HOST_FPU_FSCA: 0 the port's, 1 the console's bit for bit
+     * (xbox/port/fpu.c), and with none host.h's host_fpu_defaults. both
+     * sticks clicked, or F8, flip them */
+    {
+        int k;
+
+        fpu_models = (volatile int *)(uintptr_t)symbol_address(&main_symbols, "port_fpu");
+        fpu_note = (volatile int *)(uintptr_t)symbol_address(&main_symbols, "port_fpu_note");
+        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
+            fpu_chosen[k] = host_fpu_model(k, getenv(host_fpu_settings[k]));
+            if (fpu_models != NULL) {
+                fpu_models[k] = fpu_chosen[k];
+            }
+        }
+        if (fpu_models != NULL) {
+            fpu_log("");
+        } else {
+            fprintf(stderr, "host: 1st_read has no port_fpu: the SH-4 FPU settings do nothing\n");
         }
     }
     game_main = (void (*)(void))(uintptr_t)symbol_address(&main_symbols, "main");

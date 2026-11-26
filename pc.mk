@@ -115,13 +115,26 @@ pc_flags = $(PCFLAGS) $(if $(filter -optimize=0,$1),-O0) $(call pc_double,$1)
 pc = mkdir -p $(@D) && rm -f $@.failed && (LC_ALL=C $(PC_CC) $(call pc_flags,$2) $(if $(or $4,$(PC_FROM)),-iquote $(<D)) \
 	$(addprefix -I,$(subst $(comma), ,$1)) -fno-color-diagnostics -fno-caret-diagnostics -MD -MP -MT $@ \
 	-MF $(@:.o=.d) $(if $3,-E $(or $4,$(PC_FROM),$<) > $(@:.o=.i) && python3 tools/floats.py \
-	$(strip --shc $3 $(filter -fpu=single -double=float -aggressive=2,$2)) --system xbox/include --system tools/sh4zam/include $(@:.o=.i) && \
-	LC_ALL=C $(PC_CC) $(call pc_flags,$2) -fno-color-diagnostics -fno-caret-diagnostics -c -o $@ $(@:.o=.i), \
+	$(strip --shc $3 $(filter -fpu=single -double=float -aggressive=2,$2)) --system xbox/include $(@:.o=.i) && \
+	$(call pc_compile_i,$2,$3), \
 	-c -o $@ $(or $4,$(PC_FROM),$<))) > $@.log 2>&1 || (mv $@.log $@.failed; rm -f $@; true)
+# $(call pc_compile_i,FLAGS,RELEASE) compiles the float pass's .i to $@. R26
+# and R32 fuse products into sums by FMAC, which the pass leaves alone for a
+# compiler's contraction to fuse, as make dc's GCC does. clang contracts them
+# the same, in LLVM IR, before any pass runs, and tools/pcfmac.py makes each
+# a call of the port's FMAC (xbox/port/fpu.c), which rounds once as the
+# console's does, where the Pentium III would round the product and the sum
+# apart. R10 fuses none, and its objects compile as before
+pc_fuses = $(filter r26 r32,$1)
+pc_compile_i = $(if $(call pc_fuses,$2),LC_ALL=C $(PC_CC) $(call pc_flags,$1) -ffp-contract=on \
+	-fno-color-diagnostics -fno-caret-diagnostics -Xclang -disable-llvm-passes -S -emit-llvm -o $(@:.o=.ll) \
+	$(@:.o=.i) && python3 tools/pcfmac.py $(@:.o=.ll) && LC_ALL=C $(PC_CC) $(call pc_flags,$1) \
+	-Wno-unused-command-line-argument -fno-color-diagnostics -c -o $@ $(@:.o=.ll),LC_ALL=C $(PC_CC) \
+	$(call pc_flags,$1) -fno-color-diagnostics -fno-caret-diagnostics -c -o $@ $(@:.o=.i))
 
 $(PC_OBJ): Makefile config/compilers.mk pc.mk config/pc.mk
 $(PC_C_OBJ) $(PC_INLINE_OBJ) $(PC_CONTENT_OBJ): tools/floats.py $(wildcard tools/float_*.py) tools/csource.py \
-	tools/tool.py tools/layout.py
+	tools/tool.py tools/layout.py tools/pcfmac.py
 $(PC_OBJ): build/headers.txt
 -include $(PC_OBJ:.o=.d)
 

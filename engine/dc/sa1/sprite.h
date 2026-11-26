@@ -21,7 +21,12 @@
 #include <kamui.h>
 #include <ninja.h>
 #include <sg_xpt.h>
+#ifdef XBOX
+/* the Xbox port takes no SH4ZAM: the port's vectors */
+#include "xbox/include/vec_xbox.h"
+#else
 #include <sh4zam/shz_xmtrx.h>
+#endif
 
 #include "engine/dc/dreamcast.h"
 #include "sa1/screen.h"
@@ -339,7 +344,13 @@ ALWAYS_INLINE void sa1_live_sprite(const NJS_SPRITE *sp,
     } else if (state->how == SA1_SPRITE_PLANE) {
         sq = sprite_send_plane(sp, state->n, state->attr, sq);
     } else {
+#ifdef XBOX
+        /* the port's FTRV (xbox/include/zam_xbox.h), where SH4ZAM's
+         * software back end would sum the products as floats */
+        view = zam_xmtrx_point3(zam_load_vec3(&sp->p));
+#else
         view = shz_xmtrx_transform_point3(zam_load_vec3(&sp->p));
+#endif
         sq = sprite_send_facing_at(
             sp, state->n, state->attr, state->y_scale, view,
             state->how == SA1_SPRITE_FACING_BIASED ? view.z + state->bias
