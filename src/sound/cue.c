@@ -171,7 +171,14 @@ int sound_falloff_volume(NJS_POINT3 *pos, const struct sound_falloff *falloff)
     if (pos == NULL || camera_work == NULL) {
         volume = near_volume;
     } else {
+#ifdef XBOX
+        /* the port's own models for sound's math (xbox/include/sh4.h) */
+        SH4_FPU_OWN_BEGIN();
         distance = njDistanceP2P(pos, &camera_work->pos);
+        SH4_FPU_OWN_END();
+#else
+        distance = njDistanceP2P(pos, &camera_work->pos);
+#endif
         if (distance <= (Float)near) {
             volume = near_volume;
         } else if (distance >= (Float)far) {

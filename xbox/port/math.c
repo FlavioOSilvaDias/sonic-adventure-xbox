@@ -56,7 +56,7 @@ struct sh4_sincos port_sincos16(unsigned short angle)
 {
     struct sh4_sincos pair;
 
-    if (port_fpu[SH4_FPU_FSCA]) {
+    if (SH4_FPU_EXACT(SH4_FPU_FSCA)) {
         port_fsca_exact(angle, &pair.sin, &pair.cos);
         return pair;
     }

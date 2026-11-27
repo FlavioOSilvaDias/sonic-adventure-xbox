@@ -21,10 +21,14 @@ void(njSetLightAngle)(NJS_LIGHT *l, Angle iang, Angle oang)
 
     l->attr.iang = iang;
     l->attr.oang = oang;
+    /* the port's own models, whatever port_fpu says: a light's math only
+     * shades (xbox/include/sh4.h) */
+    SH4_FPU_OWN_BEGIN();
     _builtin_fsca(iang, &s, &c);
     l->ltcal.cosi = c * c;
     _builtin_fsca(oang, &s, &c);
     l->ltcal.cose = c * c;
     l->ltcal.reserve = (Int)(((Uint32)l->attr.iang + 0x10000 & 0xffff) << 16 |
                              ((Uint32)l->attr.oang + 0x10000 & 0xffff));
+    SH4_FPU_OWN_END();
 }

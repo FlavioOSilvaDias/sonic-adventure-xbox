@@ -89,7 +89,7 @@ done
 # libm.c (sh4_test_sums: float sums; port_sincos16: libm.c's sines), as
 # emulate.c runs them on the SH-4 side, where the game takes the console's
 # (Flycast's sums, the console's FSCA table): so a difference is the
-# translation's. the port's C is make pc's
+# translation's. the port's C is make pc's, or make pc's object itself
 resource=$($cc -print-resource-dir)/include
 flags="--target=i386-linux-gnu -msse2 -mfpmath=sse -std=gnu17 -ffreestanding -fno-builtin -nostdinc
     -isystem $resource -DNONMATCHING -DXBOX -DNDEBUG -D__CLANG_MAX_ALIGN_T_DEFINED
@@ -97,6 +97,14 @@ flags="--target=i386-linux-gnu -msse2 -mfpmath=sse -std=gnu17 -ffreestanding -fn
     -ffp-contract=off -w -O2 -Isdk/include -Isrc -I."
 objects=
 for source in $c_sources xbox/test/libm.c; do
+    case $source in
+    *.o)
+        # an object make pc built, as the game links it: a fused source's,
+        # its products the port's FMAC (tools/pcfmac.py)
+        objects="$objects $source"
+        continue
+        ;;
+    esac
     object=$out/$(echo "$source" | tr / _).o
     $cc $flags -c -o "$object" "$source"
     objects="$objects $object"

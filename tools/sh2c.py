@@ -3,7 +3,7 @@
 Usage: sh2c.py SOURCE [--call SYMBOL=TEMPLATE]... [--dynamic TEMPLATE]
                [--declare TEXT]... [--only NAME]... [--global Rn=NAME]...
                [--skip-defined FILE] [--literal VALUE=EXPRESSION]...
-               [--picture]
+               [--picture] [--own]
 
 SOURCE is a C source of the tree with #pragma inline_asm bodies, as
 sdk/ninja/njLtSrcs.c. The tool prints a C definition of each body, or of
@@ -42,8 +42,11 @@ within straight runs. --declare adds TEXT ahead of the definitions, for a
 name the body takes that no header declares. --picture writes FIPR, FTRV
 and FSRRA as xbox/include/sh4.h's models for a drawer, the port's own,
 where the bodies only draw, as Ninja's model drawers' and lights' do: a
-body without it takes play's models. The tool fails on an instruction it
-doesn't model, naming the body and the line.
+body without it takes play's models. --own brackets each body, at its
+start and at its end, with xbox/include/sh4.h's SH4_FPU_OWN_BEGIN and
+SH4_FPU_OWN_END, so that the calls it makes take the port's own models
+too, as --picture's inline instructions do: Ninja's lights. The tool fails
+on an instruction it doesn't model, naming the body and the line.
 """
 
 import argparse
@@ -185,10 +188,12 @@ def parameters(head):
 class Translate:
     """one body's C"""
 
-    def __init__(self, body, calls, dynamic, globals_=None, literals=None, picture=False):
+    def __init__(self, body, calls, dynamic, globals_=None, literals=None, picture=False, own=False):
         self.body, self.calls, self.dynamic = body, calls, dynamic
         # the models' suffix: a drawer's, or play's
         self.model = '_picture' if picture else ''
+        # the port's own models for the body's calls too, whatever port_fpu says
+        self.own = own
         self.globals = globals_ or {}
         self.literals = literals or {}
         self.out = []
@@ -583,6 +588,8 @@ class Translate:
         self.emit('Uint32 stack[256];')
         self.emit('(void)cond; (void)macl; (void)mach; (void)target; (void)fpul; (void)t;')
         self.emit('r[15] = (Uint32)&stack[256];')
+        if self.own:
+            self.emit('SH4_FPU_OWN_BEGIN();')
         if self.uses_back:
             self.emit('sh4_xmtrx_get(bank[1]);')
         for number_, name_ in self.globals.items():
@@ -633,6 +640,8 @@ class Translate:
             self.step(op, args, constants)
             i += 1
         self.out.append('done:;')
+        if self.own:
+            self.emit('SH4_FPU_OWN_END();')
         for number_, name_ in self.globals.items():
             self.emit(f'{name_} = (__typeof__({name_}))r[{number_}];')
         if self.uses_back:
@@ -685,6 +694,7 @@ def main():
     parser.add_argument('--skip-defined')
     parser.add_argument('--literal', dest='literals', action='append', default=[])
     parser.add_argument('--picture', action='store_true')
+    parser.add_argument('--own', action='store_true')
     args = parser.parse_args()
     defined = set()
     if args.skip_defined:
@@ -709,7 +719,7 @@ def main():
     for body in bodies(args.source):
         if (args.only and body.name not in args.only) or body.name in defined:
             continue
-        t = Translate(body, calls, args.dynamic, globals_, literals, args.picture)
+        t = Translate(body, calls, args.dynamic, globals_, literals, args.picture, args.own)
         lines = t.run()
         for line in t.data():
             print(line)

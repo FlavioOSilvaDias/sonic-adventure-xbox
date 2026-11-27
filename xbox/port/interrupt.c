@@ -128,12 +128,26 @@ static void *park(const Uint8 *frame)
     return top;
 }
 
+/* the blank's handlers, as play, whose math takes the console's models: a
+ * blank that lands inside sound's or a light's math, where port_fpu_own is
+ * nonzero (xbox/include/sh4.h), runs them with it 0, then gives it back */
+extern int port_fpu_own;
+
+static void blank_handlers(void)
+{
+    int held = port_fpu_own;
+
+    port_fpu_own = 0;
+    port_blank_handlers();
+    port_fpu_own = held;
+}
+
 void port_interrupt_body(Uint8 *frame)
 {
     struct sy_fiber *to;
 
     in_interrupt = 1;
-    port_blank_handlers();
+    blank_handlers();
     to = port_fiber_take_delayed();
     if (to != NULL && to != port_fiber_current(NULL) && to->sp != NULL) {
         struct sy_fiber *from = port_fiber_current(to);
@@ -155,7 +169,7 @@ void port_interrupt_body(Uint8 *frame)
 static void run_now(void)
 {
     if (!port_blank_masked()) {
-        port_blank_handlers();
+        blank_handlers();
     }
 }
 

@@ -39,6 +39,21 @@ enum sh4_fpu_instruction {
     SH4_FPU_INSTRUCTIONS
 };
 extern int port_fpu[SH4_FPU_INSTRUCTIONS];
+/* nonzero where the port's own models are asked for, whatever port_fpu
+ * says: sound's math (src/sound/), and Ninja's lights, between
+ * SH4_FPU_OWN_BEGIN and SH4_FPU_OWN_END, whose results only shade and pan,
+ * and no game step reads. each fiber keeps its own (xbox/port/fiber.c), and
+ * the blank's handlers run with it 0 (xbox/port/interrupt.c), as play */
+extern int port_fpu_own;
+#define SH4_FPU_OWN_BEGIN() (port_fpu_own++)
+#define SH4_FPU_OWN_END() (port_fpu_own--)
+/* 0; 1 by a poke (HOST_POKE=1:port_fpu_all+0:1) for a test that every
+ * model in the game is port_fpu's: sound's, the lights' and the drawers'
+ * too, the _picture ones below among them */
+extern int port_fpu_all;
+/* the exact model of instruction, where port_fpu asks for it and no
+ * SH4_FPU_OWN_BEGIN does otherwise */
+#define SH4_FPU_EXACT(instruction) (port_fpu[instruction] && (!port_fpu_own || port_fpu_all))
 float port_fipr_exact(float a0, float a1, float a2, float a3, float b0, float b1, float b2, float b3);
 void port_ftrv_exact(const float xf[16], const float v[4], float out[4]);
 float port_fsrra_exact(float n);
@@ -90,7 +105,7 @@ static inline Float sh4_fipr(Float a0, Float a1, Float a2, Float a3, Float b0,
                              Float b1, Float b2, Float b3)
 {
 #ifdef XBOX
-    if (port_fpu[SH4_FPU_FIPR]) {
+    if (SH4_FPU_EXACT(SH4_FPU_FIPR)) {
         return port_fipr_exact(a0, a1, a2, a3, b0, b1, b2, b3);
     }
     return sh4_sse_fipr(a0, a1, a2, a3, b0, b1, b2, b3);
@@ -104,6 +119,9 @@ static inline Float sh4_fipr_picture(Float a0, Float a1, Float a2, Float a3, Flo
                                      Float b3)
 {
 #ifdef XBOX
+    if (port_fpu_all) {
+        return sh4_fipr(a0, a1, a2, a3, b0, b1, b2, b3);
+    }
     return sh4_sse_fipr(a0, a1, a2, a3, b0, b1, b2, b3);
 #else
     return a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
@@ -145,7 +163,7 @@ static inline void sh4_xmtrx_set(const Float xf[16])
 static inline void sh4_ftrv(const Float xf[16], const Float v[4], Float out[4])
 {
 #ifdef XBOX
-    if (port_fpu[SH4_FPU_FTRV]) {
+    if (SH4_FPU_EXACT(SH4_FPU_FTRV)) {
         port_ftrv_exact(xf, v, out);
         return;
     }
@@ -173,6 +191,10 @@ static inline void sh4_xmtrx_ftrv(const Float v[4], Float out[4])
 static inline void sh4_ftrv_picture(const Float xf[16], const Float v[4], Float out[4])
 {
 #ifdef XBOX
+    if (port_fpu_all) {
+        sh4_ftrv(xf, v, out);
+        return;
+    }
     sh4_sse_ftrv(xf, v, out);
 #else
     Float in[4];
@@ -230,7 +252,7 @@ static inline void sh4_xmtrx_apply3_picture(const NJS_POINT3 *p, Float w, NJS_PO
 static inline Float sh4_fsrra(Float n)
 {
 #ifdef XBOX
-    if (port_fpu[SH4_FPU_FSRRA]) {
+    if (SH4_FPU_EXACT(SH4_FPU_FSRRA)) {
         return port_fsrra_exact(n);
     }
 #endif
@@ -240,6 +262,11 @@ static inline Float sh4_fsrra(Float n)
 /* FSRRA for a drawer: the exact 1 / sqrt, whatever port_fpu says */
 static inline Float sh4_fsrra_picture(Float n)
 {
+#ifdef XBOX
+    if (port_fpu_all) {
+        return sh4_fsrra(n);
+    }
+#endif
     return 1.0F / __builtin_sqrtf(n);
 }
 

@@ -109,6 +109,28 @@ for f in njPushMatrix njPopMatrix njTranslate njTranslateV njScale njScaleV njGe
     asm="$asm $b/${f}_inline.s" c="$c $x/$f.c"
 done
 run ninja13 "$asm" "$c $m"
+# $o/PATH.s, the GNU as text of SHC's own code for PATH.c, by R32 and the
+# options after PATH, as make compiles it. its variable is its own, as sh
+# keeps one set for the script
+shc_asm() {
+    shc_src=$1
+    shift
+    mkdir -p "build/tmp/shc_asm/$shc_src/t" "$o/$(dirname "$shc_src")"
+    SHC_LIB=tools/shc-v5.0r32 SHC_TMP="build/tmp/shc_asm/$shc_src/t" \
+        SHC_INC=sdk/include,src,modules,events,build/gen/src,build/gen/modules,build/gen/events,build/gen/sdk \
+        tools/wibo-i686 tools/shc-v5.0r32/shc.exe "$shc_src.c" "-objectfile=build/tmp/shc_asm/$shc_src/o.src" \
+        -code=asmcode -cpu=sh4 -endian=little -define=DREAMCAST -fpu=single "$@" > "build/tmp/shc_asm/$shc_src/log" 2>&1 && \
+        python3 tools/floats.py --assembly "build/tmp/shc_asm/$shc_src/o.src" && \
+        build/shckit translate -o "$o/$shc_src.s" "build/tmp/shc_asm/$shc_src/o.src"
+}
+# the C runtime's atan2f, asinf and acosf and their helpers: SHC's code on
+# the SH-4, the game's objects, their fused products the port's FMAC, on x86
+asm= c=
+for f in atan2f asinf acosf _i_atn2s _i_atans _i_asins _i_acoss _i_ldes _i_fmds _a_atans consts; do
+    shc_asm sdk/runtime/$f
+    asm="$asm $o/sdk/runtime/$f.s" c="$c build/pc/sdk/runtime/$f.o"
+done
+run runtime_math "$asm" "$c"
 # the threads: make dc's split C of thread.c on the SH-4, make pc's on x86
 SH_FLOATS="--shc r32" run thread $d/src/system/thread.c build/pc/src/system/thread.c
 exit $status

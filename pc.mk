@@ -125,7 +125,8 @@ pc = mkdir -p $(@D) && rm -f $@.failed && (LC_ALL=C $(PC_CC) $(call pc_flags,$2)
 # a call of the port's FMAC (xbox/port/fpu.c), which rounds once as the
 # console's does, where the Pentium III would round the product and the sum
 # apart. R10 fuses none, and its objects compile as before
-pc_fuses = $(filter r26 r32,$1)
+# config/pc.mk's PC_UNFUSED sources fuse none, though their release would
+pc_fuses = $(if $(filter $(PC_UNFUSED),$<),,$(filter r26 r32,$1))
 pc_compile_i = $(if $(call pc_fuses,$2),LC_ALL=C $(PC_CC) $(call pc_flags,$1) -ffp-contract=on \
 	-fno-color-diagnostics -fno-caret-diagnostics -Xclang -disable-llvm-passes -S -emit-llvm -o $(@:.o=.ll) \
 	$(@:.o=.i) && python3 tools/pcfmac.py $(@:.o=.ll) && LC_ALL=C $(PC_CC) $(call pc_flags,$1) \

@@ -11,6 +11,10 @@
  * includes no port header, so that xbox/test/libm.c can take it for the
  * tests' x86 side */
 #include "xbox/third_party/sh4_fpu_approx/sh4_fpu_approx.h"
+/* pc.mk's pc_double compiles the port's C with -Ddouble=float, as SHC's
+ * -fpu=single has the game's; port_fmac's exact path needs a true double
+ * for its one rounding, which a float product and sum would make two */
+#undef double
 
 /* FPSCR.RM 1: rounding toward zero, the game's mode */
 #define FPU_RZ 1
@@ -25,6 +29,13 @@ int port_fpu[5];
 /* the frames left of the models' names on the screen after a flip
  * (port_fpu_draw in port.c), which the host sets */
 volatile int port_fpu_note;
+/* nonzero where the port's own models are asked for, whatever port_fpu
+ * says: sound's math and Ninja's lights (xbox/include/sh4.h's
+ * SH4_FPU_OWN_BEGIN) */
+int port_fpu_own;
+/* 1 by a poke: every model port_fpu's, sound's, the lights' and the
+ * drawers' too (xbox/include/sh4.h) */
+int port_fpu_all;
 
 union fpu_bits {
     float f;
@@ -113,7 +124,7 @@ float port_fmac(float f0, float fm, float fn)
 {
     union fpu_bits a, b, c, r;
 
-    if (!port_fpu[4]) {
+    if (!port_fpu[4] || (port_fpu_own && !port_fpu_all)) {
         return f0 * fm + fn;
     }
     a.f = f0;

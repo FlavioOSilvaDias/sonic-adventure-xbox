@@ -17,7 +17,8 @@ flags="--target=i386-linux-gnu -march=pentium3 -msse -mfpmath=sse -std=gnu17 -ff
 objects=
 for source in xbox/test/fpu_exact_port.c xbox/port/math.c xbox/port/fpu.c; do
     object=$out/$(echo "$source" | tr / _).o
-    $cc $flags -c -o "$object" "$source"
+    # -Ddouble=float, as pc.mk's pc_double gives the port's C
+    $cc $flags -Ddouble=float -c -o "$object" "$source"
     objects="$objects $object"
 done
 # play math's console build, the reference for FMAC and a second one for the

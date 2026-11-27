@@ -36,6 +36,9 @@ void(njSetLightMaterials)(void)
     Float *out = (Float *)&_nj_light_material_;
     Int k;
 
+    /* the port's own models, whatever port_fpu says: a light's math only
+     * shades (xbox/include/sh4.h) */
+    SH4_FPU_OWN_BEGIN();
     for (k = 12; k >= 0; k--) {
         out[k] = material[k];
     }
@@ -48,12 +51,16 @@ void(njSetLightMaterials)(void)
             light->ltcal.rate = _builtin_fsrra(spread * spread);
         }
     }
+    SH4_FPU_OWN_END();
 }
 
 void(njCalcLightMatrices)(void)
 {
     Int k;
 
+    /* the port's own models, whatever port_fpu says: a light's math only
+     * shades (xbox/include/sh4.h) */
+    SH4_FPU_OWN_BEGIN();
     for (k = _nj_light_queue_.count - 1; k >= 0; k--) {
         NJS_LIGHT *light = queued(k);
 
@@ -62,6 +69,7 @@ void(njCalcLightMatrices)(void)
         (njCalcPoint)(&light_to_view_matrix, &light->pnt, &light->ltcal.lpnt);
         (njCalcVector)(&light_to_view_matrix, &light->vctr, &light->ltcal.lvctr);
     }
+    SH4_FPU_OWN_END();
 }
 
 void njResetQueue(void)
