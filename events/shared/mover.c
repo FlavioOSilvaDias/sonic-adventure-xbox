@@ -31,6 +31,23 @@ void event_mover_step(struct task *task)
     NJS_VECTOR moved;
     struct angles turned;
 
+#ifdef NONMATCHING
+    /* a skip can kill a follow move's base while the move has steps left.
+     * in EV0008, Start during the claw's 50-step follow leaves the move
+     * short of its end when the script's EVENT_KILL(ev0008_claw_0) runs,
+     * and task_free_work leaves base's work null. MOVER_FOLLOW,
+     * MOVER_FOLLOW_ANGLES, MOVER_FOLLOW_TURN and MOVER_FACING would read its
+     * place and angles from 0x20 on, which faults on the PC. a move whose
+     * base is gone ends, leaving target where the move last set it. the mode
+     * is tested first: only the follow moves set base, which the others leave
+     * at -1 */
+    if ((work->mode == MOVER_FOLLOW || work->mode == MOVER_FOLLOW_ANGLES ||
+         work->mode == MOVER_FOLLOW_TURN || work->mode == MOVER_FACING) &&
+        move != NULL && move->base != NULL && move->base->work == NULL) {
+        END_MOVE(task, move);
+        return;
+    }
+#endif
     switch (work->mode) {
     case MOVER_IDLE:
         break;
