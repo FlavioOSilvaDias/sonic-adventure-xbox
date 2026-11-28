@@ -3,6 +3,7 @@
 Usage: sh2c.py SOURCE [--call SYMBOL=TEMPLATE]... [--dynamic TEMPLATE]
                [--declare TEXT]... [--only NAME]... [--global Rn=NAME]...
                [--skip-defined FILE] [--literal VALUE=EXPRESSION]...
+               [--picture]
 
 SOURCE is a C source of the tree with #pragma inline_asm bodies, as
 sdk/ninja/njLtSrcs.c. The tool prints a C definition of each body, or of
@@ -38,8 +39,11 @@ make pc gives them port_qacr's address.
 njModel.c's R8, onto that global: the body reads it at entry and writes it
 back at its end. FSCHG's moves of pairs follow it in text order, which the bodies keep
 within straight runs. --declare adds TEXT ahead of the definitions, for a
-name the body takes that no header declares. The tool fails on an
-instruction it doesn't model, naming the body and the line.
+name the body takes that no header declares. --picture writes FSRRA
+as xbox/include/sh4.h's model for a drawer, the exact 1 / sqrt, where the
+bodies only draw and run it at each vertex, as Ninja's model drawers' and
+lights' do: a body without it takes the console's. The tool fails
+on an instruction it doesn't model, naming the body and the line.
 """
 
 import argparse
@@ -181,8 +185,10 @@ def parameters(head):
 class Translate:
     """one body's C"""
 
-    def __init__(self, body, calls, dynamic, globals_=None, literals=None):
+    def __init__(self, body, calls, dynamic, globals_=None, literals=None, picture=False):
         self.body, self.calls, self.dynamic = body, calls, dynamic
+        # a drawer's FSRRA, or the console's
+        self.picture = picture
         self.globals = globals_ or {}
         self.literals = literals or {}
         self.out = []
@@ -482,7 +488,7 @@ class Translate:
             self.emit(f'{r} = __builtin_sqrtf({r});')
         elif op == 'FSRRA':
             r = self.fr(a[0])
-            self.emit(f'{r} = _builtin_fsrra({r});')
+            self.emit(f'{r} = sh4_fsrra_picture({r});' if self.picture else f'{r} = _builtin_fsrra({r});')
         elif op == 'FCMP/GT':
             s, d = f2()
             self.emit(f't = {d} > {s};')
@@ -678,6 +684,7 @@ def main():
     parser.add_argument('--global', dest='globals', action='append', default=[])
     parser.add_argument('--skip-defined')
     parser.add_argument('--literal', dest='literals', action='append', default=[])
+    parser.add_argument('--picture', action='store_true')
     args = parser.parse_args()
     defined = set()
     if args.skip_defined:
@@ -702,7 +709,7 @@ def main():
     for body in bodies(args.source):
         if (args.only and body.name not in args.only) or body.name in defined:
             continue
-        t = Translate(body, calls, args.dynamic, globals_, literals)
+        t = Translate(body, calls, args.dynamic, globals_, literals, args.picture)
         lines = t.run()
         for line in t.data():
             print(line)

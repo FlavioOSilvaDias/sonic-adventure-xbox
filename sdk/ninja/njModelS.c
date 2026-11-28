@@ -1097,8 +1097,9 @@ ALWAYS_INLINE void _NJM_SET_TEX_STRIP(struct calc_vertex *vertex, Uint32 pcw,
 #ifdef XBOX
     send_textured(
         vertex, pcw, (Float)uv->u * TEX_SCALE, (Float)uv->v * TEX_SCALE,
-        iamb - sh4_fipr(light2.x, light2.y, light2.z, 0.0F, vertex->normal.x,
-                        vertex->normal.y, vertex->normal.z, 0.0F));
+        iamb - sh4_fipr(light2.x, light2.y, light2.z, 0.0F,
+                                vertex->normal.x, vertex->normal.y,
+                                vertex->normal.z, 0.0F));
 #else
     send_textured(
         vertex, pcw, (Float)uv->u * TEX_SCALE, (Float)uv->v * TEX_SCALE,

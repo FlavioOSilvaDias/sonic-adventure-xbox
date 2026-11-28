@@ -117,7 +117,7 @@ ALWAYS_INLINE draw_vec4 draw_vec4_init(Float x, Float y, Float z, Float w)
     return v;
 }
 
-/* FTRV XMTRX of v */
+/* FTRV XMTRX of v, by the port's FTRV (xbox/include/sh4.h) */
 ALWAYS_INLINE draw_vec4 draw_xmtrx_vec4(draw_vec4 v)
 {
     sh4_xmtrx_ftrv(&v.x, &v.x);

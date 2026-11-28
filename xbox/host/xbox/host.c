@@ -909,8 +909,13 @@ static ULONGLONG sound_most_ticks; /* the most one blank's chores took, since th
 
 extern unsigned long long video_swap_wait_tsc; /* video.c's wait_off_screen, in this video_begin */
 
+static void fpu_check(void);
+
 static void leave_host(void)
 {
+    if (host_busy == 1) {
+        fpu_check();
+    }
     if (host_busy == 1) {
         unsigned long long took = __builtin_ia32_rdtsc() - call_started;
 
@@ -1626,7 +1631,8 @@ static void raw_video_vertices(const struct host_vertex *vertices, int count)
 /* the game's MXCSR, as fpu_as_console set it before main */
 static unsigned game_csr;
 
-/* the game's float modes, checked once a frame on its thread: MXCSR less its
+/* the game's float modes, checked as each of the game's host calls returns
+ * (leave_host), before a blank the call held back runs: MXCSR less its
  * sticky exception flags, and the x87's control word. code the game's thread
  * calls into (the host's, nxdk's, pbkit's) must leave them as they were, or
  * the game's sums round otherwise than the console's, as the blank's chores
@@ -1638,6 +1644,9 @@ static void fpu_check(void)
     unsigned csr;
     unsigned short word;
 
+    if (game_csr == 0) {
+        return; /* before main: the modes aren't the game's yet */
+    }
     __asm__ volatile("stmxcsr %0" : "=m"(csr));
     __asm__ volatile("fnstcw %0" : "=m"(word));
     if ((csr & ~0x3fu) == (game_csr & ~0x3fu) && word == 0x0e7f) {
@@ -1656,7 +1665,6 @@ static void fpu_check(void)
 
 static void raw_video_present(void)
 {
-    fpu_check();
     if (have_video) {
         video_present();
     }

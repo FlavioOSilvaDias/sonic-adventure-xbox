@@ -20,7 +20,6 @@ static struct sy_fiber *current;
 static struct sy_fiber *delayed;
 /* each fiber's function, which its first turn calls with its data */
 static void (*funcs[MAX_FIBERS])(void *);
-
 /* save the kept registers and the stack pointer in *save, then load them
  * from load and return on its stack */
 void port_fiber_switch(void **save, void *load);

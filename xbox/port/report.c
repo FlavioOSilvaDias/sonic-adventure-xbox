@@ -656,3 +656,42 @@ static void report_log(void)
     }
 }
 
+/* a test's record of play's state, a line of the log at each picture where
+ * a poke sets it (HOST_POKE=1:port_trace+0:1): a hash of the two players'
+ * and the camera's work (modes, timers, angles, places, scales) and rand's
+ * seed, so that two runs of a demo can be compared picture by picture */
+int port_trace;
+extern unsigned long _rnext;
+
+static Uint32 trace_hash(Uint32 hash, const void *data, Uint32 size)
+{
+    const Uint8 *bytes = data;
+    Uint32 k;
+
+    for (k = 0; k < size; k++) {
+        hash = (hash ^ bytes[k]) * 16777619u;
+    }
+    return hash;
+}
+
+void port_trace_picture(void)
+{
+    static Uint32 pictures;
+    char line[96];
+    Uint32 hash = 2166136261u;
+    int k;
+
+    if (!port_trace) {
+        return;
+    }
+    for (k = 0; k < 2; k++) {
+        if (player_work[k] != NULL) {
+            hash = trace_hash(hash, player_work[k], offsetof(struct task_work, collision));
+        }
+    }
+    if (camera_work != NULL) {
+        hash = trace_hash(hash, camera_work, offsetof(struct task_work, collision));
+    }
+    sprintf(line, "trace: %u %08x %08x", (unsigned)pictures++, (unsigned)_rnext, (unsigned)hash);
+    port_log(line);
+}

@@ -27,7 +27,7 @@ Checks that must keep passing:
 
 - `make check`: "4309 files match SHA256SUMS".
 - `xbox/test/all.sh`: 22 SH-4 translation tests, 0 real differences (a zero's sign and a NaN's bits don't count).
-- `xbox/test/sh4_sse.sh`: the x87 FIPR and FTRV against the C they replaced, 0 differences.
+- `xbox/test/sh4_sse.sh` and `xbox/test/fpu_exact.sh`: the SH-4 FPU models, 0 differences and "fpu_exact: 0 real".
 - Docs: `git add -N XBOX.md && PYTHONPATH=tools:tests python3 -m unittest tests.test_docs; git reset -q XBOX.md`
 
 ## What has been implemented
@@ -48,8 +48,8 @@ Checks that must keep passing:
 - **Images:** each image is linked for i386 at its console address by `tools/pclink.py` from make dc's link spec. Data keeps its RAM address; code goes to code areas past `0x10000000`. An overlay's unbound name binds to 1ST_READ.BIN's, the port's XMTRX among them (`sh4_xmtrx`, one for the game, as the console's one register).
 - **Memory:** the port's RAM is area 3, the console's 16 MB then the port layer's own memory, visible at `0x0c000000`, `0x8c000000`, `0xac000000` and the store queues' `0xe0000000`.
 - **`struct host_api`** (`xbox/port/host.h`) is the line between the shared port and the two hosts: files, time, the blank, pads, cards, video, AICA registers, stats.
-- **Floats:** SSE single precision in the SH-4's mode (rounding toward zero, flush to zero, denormals as zero), set by each host before `main`; the x87 at 53 bits and rounding toward zero for FIPR's and FTRV's double sums, as Flycast computes them. FSRRA is exact here; FSCA uses the console's own table.
-- **`xbox/include/sh4.h`:** the port's XMTRX and its models of FIPR, FTRV, FSRRA, FSCA, FTRC and FMAC. `ninja.h` includes it under `XBOX` in place of `ninja_zam.h`. FIPR and FTRV are x87 asm in `xbox/include/sse/sh4_sse.h`, bit-identical to the C they replaced.
+- **Floats:** SSE single precision in the SH-4's mode (rounding toward zero, flush to zero, denormals as zero), set by each host before `main`; the x87 at 53 bits and rounding toward zero for the doubles of the port's FIPR, FTRV and FMAC ([SH-4 FPU models](#sh-4-fpu-models)).
+- **`xbox/include/sh4.h`:** the port's XMTRX and its models of FIPR, FTRV, FSRRA, FSCA, FTRC and FMAC. `ninja.h` includes it under `XBOX` in place of `ninja_zam.h`. FIPR and FTRV are x87 asm in `xbox/include/sse/sh4_sse.h`, bit-identical to the C they replaced. FSRRA and FSCA call `xbox/port/fpu.c`'s exact models.
 - **The blank** interrupts the game's thread through the port's interrupt entry, as the console's does; the game's speed follows the SH-4's timer, which the port models. On the Xbox the host breaks in from the kernel's clock interrupt, wherever the game is; its trampoline saves the x87/SSE state (FXSAVE) before its own chores, whose sound emulation computes in those registers. Without that, the game resumed on the chores' values, and objects and land pieces dropped out for a frame on the console alone. Host code at interrupt level must not touch x87/SSE outside that save.
 
 ## Target resolution
@@ -117,7 +117,7 @@ Scripting and capture:
 | --- | --- |
 | `HOST_CLOCK=frames` | pads, shots, pokes and quit count rendered frames, not blanks |
 | `HOST_PADS=600:8,610:0,2400:0/128/0` | scripts controller A: `PDD_DGT_` bits in hex, optional `/X/Y` stick |
-| `HOST_POKE=300:menu_state+0:1:1` | writes a 1ST_READ.BIN variable at a blank (this one opens every stage); a report's `port_place` line restarts at its place |
+| `HOST_POKE=300:menu_state+0:1:1` | writes a 1ST_READ.BIN variable at a blank, as `BLANK:SYMBOL+OFFSET:VALUE:SIZE`, the size in bytes (1, 2 or 4, the default), comma-separated for more (this one writes 1 to one byte and opens every stage); a report's `port_place` line restarts at its place |
 | `HOST_SHOT=F,...` | saves those frames (`build/pc/shot_N.ppm` on the PC, PNGs from xemu) |
 | `HOST_QUIT=N` | quits at blank or frame N |
 | `HOST_HEADLESS=1`, `HOST_SCALE=2`, `HOST_SLOW=3` | no window, a doubled window, console time three times slower (PC) |
@@ -125,9 +125,13 @@ Scripting and capture:
 | `HOST_PACK=PATH` | the texture pack to use (PC) |
 | `HOST_WAV=PATH`, `HOST_SOUND_RECORD=PATH` | the sound to a WAV, or the game's side of the AICA recorded for `sndreplay` (PC) |
 
-Pokes of note: `port_movie_skip+0:1`, `port_overlay+0:1`, `port_profile+0:1`, `port_report+0:1`, `port_gpu_models+0:N`, `port_sweep_cap+0:1` (widen far collision sweeps), `port_sort_triangles+0:N` (the translucent sort: 0 by strip, 1 by a triangle's nearest vertex, 2 by its middle).
+Pokes of note: `port_trace+0:1` (a log line each picture, `trace: N rand hash`, a hash of the two players', the camera's and `rand`'s state, to compare two runs of a demo), `demo_next+0:4` at blank 60 (the attract loop starts at that demo pair: 4 is the Mystic Ruins event, then Knuckles in Red Mountain), `port_movie_skip+0:1`, `port_overlay+0:1`, `port_profile+0:1`, `port_report+0:1`, `port_gpu_models+0:N`, `port_sweep_cap+0:1` (widen far collision sweeps), `port_sort_triangles+0:N` (the translucent sort: 0 by strip, 1 by a triangle's nearest vertex, 2 by its middle).
 
 The watch (on whenever reports are): logs frames in play that draw under four fifths of the strips or models of both frames beside them, with the models missing; and dumps player 0's last 32 frames and makes a report when its place or speed leaves all reason.
+
+### SH-4 FPU models
+
+To make the physics more accurate to the Dreamcast version, the port computes some of the SH-4's floating-point instructions bit for bit as the console does. FSRRA and FSCA come from skmp's bit-exact models (`xbox/third_party/sh4_fpu_approx/`, MIT: [write-up](https://drk.emudev.org/blog/sh4-fpu/)), and the products SHC fuses take the console's FMAC, rounded once (`xbox/port/fpu.c`). FIPR and FTRV stay Flycast's x87 sums, as do the model drawers' per-vertex FSRRA (the exact `1 / sqrt`): skmp's models of those cost too much on the Pentium III for results that differ by a unit of the last place.
 
 ## Experimental flags
 
@@ -419,7 +423,7 @@ The tree is upstream's 6e5a40e (reshaped/sonic-adventure), merged on 2026-11-20 
 
 - **Shipped sides:** `polygon.c`'s console rewrites (`engine/tools/marks.py`'s `CONSOLE`, by `tools/pcconsole.py`) take their shipped side, as upstream's native game does.
 - **The drawer:** every one of upstream's live draws (`sa_present_live`'s formats) goes to the renderer as a run, the host's own vertices, rather than as the tile accelerator's in Kamui's lists; the lists keep each draw's header and the run's mark, in the draws' order (`xbox/engine/sa1/emit.h`). Models draw through upstream's layer, `src/draw/model.c`, into the port's walk, `xbox/engine/sa1/model.c`, the old make gcc drawer with its GPU path, which projects and clips on the CPU what the NV2A can't take whole. Sprites, screen polygons, 2D polygons and lines, 3D lines and easy models run upstream's sends unchanged, through thin wrappers in `xbox/engine/sa1/` and `xbox/engine/sa1/strip.h`, with small `XBOX` branches in `engine/dc/sa1/sprite.h`, `engine/dc/sa1/easy.h` and `engine/dc/njsprite.h`; the easy models' kernel is `xbox/engine/batch.h`'s C. Ninja's print is one run a print (`sdk/ninja/njDebug.c`). `xbox/engine/` comes before `engine/dc/` on the include path, so a header there takes the place of the Dreamcast's. Still in the lists: Ninja's own draws outside those formats, as `njDrawTriangle3D` and `njDrawPolygon3D`, a few dozen vertices a frame in the demos.
-- **SH4ZAM:** the Dreamcast engine's sprites and screen polygons run SH4ZAM's software back end, on the port's XMTRX (`xbox/port/xmtrx.c`), with `xbox/include/zam_xbox.h` in place of `ninja_zam.h`'s helpers.
+- **No SH4ZAM:** the Xbox build takes none of the Dreamcast's SH4ZAM, and no include path holds its headers (`config/pc.mk`), so a source that reaches one fails to compile. `xbox/include/zam_xbox.h` takes the place of `ninja_zam.h`'s helpers, on the port's FIPR, FTRV, FSRRA and FSCA (`sh4.h`). The Dreamcast engine's shared drawers (`engine/dc/sa1/`, `njModel.c`) take `xbox/include/vec_xbox.h` under `XBOX`: SH4ZAM's vector types, initializers and prefetch, defined by the port with their x86 layout. Their two SH4ZAM transforms, a sprite's FTRV and the easy models' turned light, run on the port's FTRV and FIPRs (`zam_xmtrx_point3`, `zam_xmtrx_turn3_transpose`), as the native game runs them on play math. `make dc` keeps SH4ZAM.
 - **Left out:** `engine/dc/owner.c` (the port's Kamui owns the frame) and `engine/dc/crash.c` (`port_stop` logs and exits).
 - **Not yet re-applied:** the port's split-frame view fix (a far sai, the amenbo's start step) on upstream's reworked `present.c`; re-apply it if those return.
 

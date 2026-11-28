@@ -213,7 +213,12 @@ sys.stdout.write(best.decode("latin1"))
 taskkill.exe /IM xemu.exe /F > /dev/null 2>&1 || true
 sleep 2
 rm -f "$xemu/run/ram.bin" "$xemu/run/ram.new" || true
-(cd "$xemu" && ./xemu.exe -bios "$win\\bios\\bios.bin" -dvd_path "$iso" \
+# XEMU_DIR's bios/bios.bin where it has one; else the flash ROM xemu.toml
+# names
+bios=
+[ -f "$xemu/bios/bios.bin" ] && bios="-bios $win\\bios\\bios.bin"
+# shellcheck disable=SC2086
+(cd "$xemu" && ./xemu.exe $bios -dvd_path "$iso" \
     -qmp tcp:127.0.0.1:4444,server=on,wait=off > run/xemu.log 2>&1 &)
 waited=0
 while [ "$waited" -lt "$seconds" ]; do

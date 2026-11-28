@@ -431,8 +431,13 @@ static volatile int host_busy;
 static volatile int blank_owed;
 static const struct host_interrupt *interrupt;
 
+static void fpu_check(void);
+
 static void leave_host(void)
 {
+    if (host_busy == 1) {
+        fpu_check();
+    }
     /* the blanks a call held back run as it ends, with the host still busy,
      * so that one coming meanwhile waits too */
     while (host_busy == 1 && blank_owed) {
@@ -1148,6 +1153,8 @@ static int map_at(uint32_t address, uint32_t size, int fd)
  * thread rounding to nearest, which rounds every sum otherwise than the
  * console, the mode is set here; the x87, which the doubles take, the same,
  * at 53 bits (control word 0x0e7f) */
+static unsigned game_csr;
+
 static unsigned fpu_as_console(void)
 {
     static unsigned char area[512] __attribute__((aligned(16)));
@@ -1162,6 +1169,7 @@ static unsigned fpu_as_console(void)
     csr |= 0x6000u | 0x8000u | (0x0040u & mask);
     csr &= mask;
     __asm__ volatile("ldmxcsr %0" : : "m"(csr));
+    game_csr = csr;
     {
         /* the x87's too, for the doubles FIPR's and FTRV's sums take
          * (xbox/include/sse/sh4_sse.h), as Flycast's SSE2 takes them under the
@@ -1171,6 +1179,37 @@ static unsigned fpu_as_console(void)
         __asm__ volatile("fldcw %0" : : "m"(word));
     }
     return csr;
+}
+
+/* the game's float modes, checked as each of the game's host calls returns
+ * (leave_host): MXCSR less its sticky exception flags, and the x87's
+ * control word. SDL's and the GL driver's code, which the game's thread
+ * calls into, must leave them as they were, or the game's sums round
+ * otherwise than the console's. the first change is logged, and each is
+ * put back, as the Xbox host does */
+static void fpu_check(void)
+{
+    static int logged;
+    unsigned csr;
+    unsigned short word;
+
+    if (game_csr == 0) {
+        return; /* before main: the modes aren't the game's yet */
+    }
+    __asm__ volatile("stmxcsr %0" : "=m"(csr));
+    __asm__ volatile("fnstcw %0" : "=m"(word));
+    if ((csr & ~0x3fu) == (game_csr & ~0x3fu) && word == 0x0e7f) {
+        return;
+    }
+    if (!logged) {
+        logged = 1;
+        fprintf(stderr, "host: the game's float modes changed: MXCSR 0x%04x (0x%04x), x87 control word 0x%04x (0x0e7f)\n",
+                csr, game_csr, word);
+    }
+    csr = (game_csr & ~0x3fu) | (csr & 0x3fu);
+    word = 0x0e7f;
+    __asm__ volatile("ldmxcsr %0" : : "m"(csr));
+    __asm__ volatile("fldcw %0" : : "m"(word));
 }
 
 int main(int argc, char **argv)

@@ -7,10 +7,10 @@
 #ifndef BATCH_H
 #define BATCH_H
 
-#include <zam.h>
+#include <sg_xpt.h>
 #include <stdint.h>
-#include <sh4zam/shz_vector.h>
-#include <sh4zam/shz_xmtrx.h>
+
+#include "xbox/include/vec_xbox.h"
 
 #define ZAM_PREFETCH_AHEAD 64
 

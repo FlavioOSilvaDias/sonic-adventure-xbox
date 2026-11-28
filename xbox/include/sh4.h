@@ -15,6 +15,20 @@
 #include <ninja.h>
 #include "sse/sh4_sse.h"
 
+/* the console's FSRRA and FSCA bit for bit (xbox/port/fpu.c, by
+ * xbox/third_party/sh4_fpu_approx/'s models, measured against a Dreamcast),
+ * and its FMAC for the products SHC fuses, which tools/pcfmac.py writes
+ * inline at each and port_fmac gives as a call. FIPR and FTRV are Flycast's sums
+ * (sh4_sse.h): the exact ones, a model of the multiplier array, cost about
+ * 20 ms of a busy frame on the Xbox for sums that differ in 8% of cases,
+ * nearly all by one unit of the last place. a drawer's FSRRA, one a vertex,
+ * is the exact 1 / sqrt (sh4_fsrra_picture), as the console's model costs
+ * ten times it */
+float port_fsrra_exact(float n);
+void port_fsca_exact(unsigned angle, float *sin, float *cos);
+/* f0 * fm + fn as SHC's FMAC gives it, rounded once, denormals as zero */
+float port_fmac(float f0, float fm, float fn);
+
 /* a helper that inlines at every call, as zam.h defines it for make gcc */
 #ifndef ALWAYS_INLINE
 #define ALWAYS_INLINE static inline __attribute__((always_inline))
@@ -37,18 +51,19 @@ static inline Sint32 sh4_ftrc(Float f)
  * it one, leaves alone */
 typedef float sh4_double __attribute__((mode(DF)));
 
-/* FMAC: a * b + c, rounded once. the product of two floats is exact as a
- * double, and rounding toward zero twice, to a double and then to a float,
- * gives what rounding once does */
+/* FMAC, where the original assembly has one (tools/sh2c.py, xbox/sdk/):
+ * a * b + c, rounded once. the product of two floats is exact as a double,
+ * and rounding toward zero twice, to a double and then to a float, gives
+ * what rounding once does */
 static inline Float sh4_fmac(Float a, Float b, Float c)
 {
     return (Float)((sh4_double)a * (sh4_double)b + (sh4_double)c);
 }
 
-/* FIPR. on the Xbox and the PC, Flycast's: the four products as doubles,
- * summed in order, rounded once toward zero (sh4_sse.h). elsewhere, the
- * port's tests' model: the sum of the four products in order, each
- * rounded, then each sum */
+/* FIPR FVm,FVn. on the Xbox and the PC, Flycast's: the four products as
+ * doubles, summed in order, rounded once toward zero (sh4_sse.h).
+ * elsewhere, the port's tests' model: the sum of the four products in
+ * order, each rounded, then each sum */
 static inline Float sh4_fipr(Float a0, Float a1, Float a2, Float a3, Float b0,
                              Float b1, Float b2, Float b3)
 {
@@ -130,17 +145,28 @@ static inline void sh4_xmtrx_apply3(const NJS_POINT3 *p, Float w, NJS_POINT3 *ou
     out->z = v[2];
 }
 
-/* FSRRA: 1 / sqrt(n). the console's is an estimate; this is exact. a
- * negative n gives a NaN, as the SH-4's invalid operation does, and +0 an
- * infinity */
+/* FSRRA: 1 / sqrt(n), the console's estimate bit for bit, within 2 units
+ * of the last place of the exact. a negative n gives a NaN, as the SH-4's
+ * invalid operation does, and +0 an infinity. elsewhere than the Xbox and
+ * the PC, the exact 1 / sqrt */
 static inline Float sh4_fsrra(Float n)
+{
+#ifdef XBOX
+    return port_fsrra_exact(n);
+#else
+    return 1.0F / __builtin_sqrtf(n);
+#endif
+}
+
+/* FSRRA for a drawer, at each vertex (tools/sh2c.py --picture): the exact
+ * 1 / sqrt, a tenth of the console model's cost. no game step reads it */
+static inline Float sh4_fsrra_picture(Float n)
 {
     return 1.0F / __builtin_sqrtf(n);
 }
 
 /* FSCA: the sine and cosine of a 16-bit angle, 65536 to a turn, by the
- * console's own table (xbox/port/math.c; the tests' model in
- * xbox/test/libm.c) */
+ * console's model (xbox/port/math.c; the tests' model in xbox/test/libm.c) */
 struct sh4_sincos {
     Float sin, cos;
 };

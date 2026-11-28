@@ -5,7 +5,7 @@
 #include <machine.h>
 #include <ninja.h>
 #include <sg_xpt.h>
-#if defined(DREAMCAST) || defined(XBOX)
+#ifdef DREAMCAST
 #ifdef NONMATCHING
 #include <sh4zam/shz_mem.h>
 #include <sh4zam/shz_vector.h>

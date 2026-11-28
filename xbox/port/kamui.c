@@ -609,8 +609,11 @@ void kmResetPointer(void)
     start_lists();
 }
 
+void port_trace_picture(void);
+
 KMSTATUS kmRender(void)
 {
+    port_trace_picture();
     PKMDWORD ends[LISTS];
     int k;
 

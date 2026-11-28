@@ -7,7 +7,12 @@
 #include <kamui.h>
 #include <ninja.h>
 #include <sg_xpt.h>
+#ifdef XBOX
+/* the Xbox port takes no SH4ZAM: the port's vectors */
+#include "xbox/include/vec_xbox.h"
+#else
 #include <sh4zam/shz_xmtrx.h>
+#endif
 
 #include "sa1/sprite.h"
 
@@ -129,8 +134,15 @@ sprite_clip_near(struct sprite_vertex *sq, Uint32 nearer,
 static inline shz_vec3_t sprite_view(const NJS_SPRITE *sp,
                                      const struct sprite_corner *corner)
 {
+#ifdef XBOX
+    /* the port's FTRV (xbox/include/zam_xbox.h), where SH4ZAM's software
+     * back end would sum the products as floats */
+    return zam_xmtrx_point3(
+        shz_vec3_init(corner->x + sp->p.x, corner->y + sp->p.y, sp->p.z));
+#else
     return shz_xmtrx_transform_point3(
         shz_vec3_init(corner->x + sp->p.x, corner->y + sp->p.y, sp->p.z));
+#endif
 }
 
 /* put corner where view lands on the screen, and give it the 1/z rhw */

@@ -614,6 +614,7 @@ static void open_pad(void)
         }
     }
 }
+
 static void poll(void)
 {
     SDL_Event event;
