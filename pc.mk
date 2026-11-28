@@ -122,12 +122,10 @@ pc = mkdir -p $(@D) && rm -f $@.failed && (LC_ALL=C $(PC_CC) $(call pc_flags,$2)
 # and R32 fuse products into sums by FMAC, which the pass leaves alone for a
 # compiler's contraction to fuse, as make dc's GCC does. clang contracts them
 # the same, in LLVM IR, before any pass runs, and tools/pcfmac.py makes each
-# a call of the port's FMAC (xbox/port/fpu.c), which rounds once as the
-# console's does, where the Pentium III would round the product and the sum
-# apart. R10 fuses none, and its objects compile as before
-# config/pc.mk's PC_UNFUSED sources fuse none, though their release would
-pc_fuses = $(if $(filter $(PC_UNFUSED),$<),,$(filter r26 r32,$1))
-pc_compile_i = $(if $(call pc_fuses,$2),LC_ALL=C $(PC_CC) $(call pc_flags,$1) -ffp-contract=on \
+# the port's FMAC inline (xbox/port/fpu.c's port_fmac), which rounds once as
+# the console's does, where the Pentium III would round the product and the
+# sum apart. R10 fuses none, and its objects compile as before
+pc_compile_i = $(if $(filter r26 r32,$2),LC_ALL=C $(PC_CC) $(call pc_flags,$1) -ffp-contract=on \
 	-fno-color-diagnostics -fno-caret-diagnostics -Xclang -disable-llvm-passes -S -emit-llvm -o $(@:.o=.ll) \
 	$(@:.o=.i) && python3 tools/pcfmac.py $(@:.o=.ll) && LC_ALL=C $(PC_CC) $(call pc_flags,$1) \
 	-Wno-unused-command-line-argument -fno-color-diagnostics -c -o $@ $(@:.o=.ll),LC_ALL=C $(PC_CC) \

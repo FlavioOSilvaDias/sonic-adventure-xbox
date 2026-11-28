@@ -57,17 +57,33 @@ struct sh4_sincos test_sincos16(unsigned short angle)
     return pair;
 }
 
-/* the tests' model of FSRRA for both runs, as xbox/include/sh4.h's */
+/* the console's FSRRA for both runs, as the game takes it: on the x86 run,
+ * xbox/port/fpu.c's, which xbox/include/sh4.h's sh4_fsrra calls, and on the
+ * SH-4 run the vendored model it copies, which emulate.c runs for the
+ * SH-4's FSRRA. xbox/test/fpu_exact.sh checks the two give the same bits */
+#ifdef XBOX
+#include "xbox/port/fpu.c"
+#else
+#include "../third_party/sh4_fpu_approx/sh4_fpu_approx.h"
+#endif
+
 float test_fsrra(float x)
 {
-    return 1.0F / sqrtf(x);
+    union {
+        float f;
+        uint32_t u;
+    } bits;
+
+    bits.f = x;
+    bits.u = sh4_fsrra(bits.u, 1);
+    return bits.f;
 }
 
 /* the port's side of the x86 run (xbox/include/sh4.h): its XMTRX, which
  * xmtrx.c loads and stores, FIPR's and FTRV's float sums (sh4_test_sums 1),
  * as emulate.c runs them on the SH-4 side, and the FSCA model above. the
- * game takes the console's: Flycast's sums (sh4_test_sums 0) and its FSCA
- * table (xbox/port/math.c) */
+ * game takes Flycast's sums (sh4_test_sums 0) and the console's FSCA
+ * (xbox/port/math.c) */
 float sh4_xmtrx[16];
 
 int sh4_test_sums = 1;
@@ -76,10 +92,3 @@ struct sh4_sincos port_sincos16(unsigned short angle)
 {
     return test_sincos16(angle);
 }
-
-/* the exact models (xbox/port/fpu.c), which sh4.h's models call where
- * port_fpu asks: the x86 run leaves port_fpu at 0, the tests' models, so
- * they link but never run. the SH-4 side, which takes no XBOX, has none */
-#ifdef XBOX
-#include "xbox/port/fpu.c"
-#endif

@@ -100,9 +100,6 @@ void(njCreateLight)(NJS_LIGHT *l, Int type)
     if (count >= 32) {
         return;
     }
-    /* the port's own models, whatever port_fpu says: a light's math only
-     * shades (xbox/include/sh4.h) */
-    SH4_FPU_OWN_BEGIN();
     _nj_light_control_.light[count] = l;
     _nj_light_control_.count = count + 1;
     l->stat = 1;
@@ -158,5 +155,4 @@ void(njCreateLight)(NJS_LIGHT *l, Int type)
     light_scale_color(&cal->dif, &cal->atten, attr->idif);
     light_scale_color(&cal->spc, &cal->atten, attr->ispc);
     (njUnitMatrix)(&l->mtrx);
-    SH4_FPU_OWN_END();
 }

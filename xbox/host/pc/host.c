@@ -431,8 +431,13 @@ static volatile int host_busy;
 static volatile int blank_owed;
 static const struct host_interrupt *interrupt;
 
+static void fpu_check(void);
+
 static void leave_host(void)
 {
+    if (host_busy == 1) {
+        fpu_check();
+    }
     /* the blanks a call held back run as it ends, with the host still busy,
      * so that one coming meanwhile waits too */
     while (host_busy == 1 && blank_owed) {
@@ -510,43 +515,6 @@ static unsigned scripted_buttons(int *x, int *y)
     return buttons;
 }
 
-/* the SH-4 FPU models (host.h's host_fpu_): the game's port_fpu and
- * port_fpu_note, or null in images older than them, and the settings'
- * values, which the chord flips against */
-static volatile int *fpu_models;
-static volatile int *fpu_note;
-static int fpu_chosen[HOST_FPU_INSTRUCTIONS];
-
-static void fpu_log(const char *why)
-{
-    fprintf(stderr, "host: SH-4 FPU models in play%s: FIPR %s, FTRV %s, FSRRA %s, FSCA %s, FMAC %s\n", why,
-            fpu_models[0] ? "exact" : "port", fpu_models[1] ? "exact" : "port", fpu_models[2] ? "exact" : "port",
-            fpu_models[3] ? "exact" : "port", fpu_models[4] ? "exact" : "port");
-}
-
-/* both sticks clicked, or F8, fresh: the models flip (host_fpu_flip) */
-static void fpu_chord(int clicked)
-{
-    static int clicked_was;
-    int models[HOST_FPU_INSTRUCTIONS];
-    int k;
-
-    if (clicked && !clicked_was && fpu_models != NULL) {
-        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
-            models[k] = fpu_models[k];
-        }
-        host_fpu_flip(fpu_chosen, models);
-        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
-            fpu_models[k] = models[k];
-        }
-        if (fpu_note != NULL) {
-            *fpu_note = HOST_FPU_NOTE_FRAMES;
-        }
-        fpu_log(", flipped by the chord");
-    }
-    clicked_was = clicked;
-}
-
 static unsigned host_pad_read(int port, int *x, int *y, int *l, int *r)
 {
     unsigned buttons;
@@ -560,7 +528,6 @@ static unsigned host_pad_read(int port, int *x, int *y, int *l, int *r)
     if (have_video) {
         buttons |= video_keys();
         video_stick(x, y, l, r);
-        fpu_chord(video_fpu_chord());
     }
     return buttons;
 }
@@ -1186,6 +1153,8 @@ static int map_at(uint32_t address, uint32_t size, int fd)
  * thread rounding to nearest, which rounds every sum otherwise than the
  * console, the mode is set here; the x87, which the doubles take, the same,
  * at 53 bits (control word 0x0e7f) */
+static unsigned game_csr;
+
 static unsigned fpu_as_console(void)
 {
     static unsigned char area[512] __attribute__((aligned(16)));
@@ -1200,6 +1169,7 @@ static unsigned fpu_as_console(void)
     csr |= 0x6000u | 0x8000u | (0x0040u & mask);
     csr &= mask;
     __asm__ volatile("ldmxcsr %0" : : "m"(csr));
+    game_csr = csr;
     {
         /* the x87's too, for the doubles FIPR's and FTRV's sums take
          * (xbox/include/sse/sh4_sse.h), as Flycast's SSE2 takes them under the
@@ -1209,6 +1179,37 @@ static unsigned fpu_as_console(void)
         __asm__ volatile("fldcw %0" : : "m"(word));
     }
     return csr;
+}
+
+/* the game's float modes, checked as each of the game's host calls returns
+ * (leave_host): MXCSR less its sticky exception flags, and the x87's
+ * control word. SDL's and the GL driver's code, which the game's thread
+ * calls into, must leave them as they were, or the game's sums round
+ * otherwise than the console's. the first change is logged, and each is
+ * put back, as the Xbox host does */
+static void fpu_check(void)
+{
+    static int logged;
+    unsigned csr;
+    unsigned short word;
+
+    if (game_csr == 0) {
+        return; /* before main: the modes aren't the game's yet */
+    }
+    __asm__ volatile("stmxcsr %0" : "=m"(csr));
+    __asm__ volatile("fnstcw %0" : "=m"(word));
+    if ((csr & ~0x3fu) == (game_csr & ~0x3fu) && word == 0x0e7f) {
+        return;
+    }
+    if (!logged) {
+        logged = 1;
+        fprintf(stderr, "host: the game's float modes changed: MXCSR 0x%04x (0x%04x), x87 control word 0x%04x (0x0e7f)\n",
+                csr, game_csr, word);
+    }
+    csr = (game_csr & ~0x3fu) | (csr & 0x3fu);
+    word = 0x0e7f;
+    __asm__ volatile("ldmxcsr %0" : : "m"(csr));
+    __asm__ volatile("fldcw %0" : : "m"(word));
 }
 
 int main(int argc, char **argv)
@@ -1301,27 +1302,6 @@ int main(int argc, char **argv)
         if (frame_clock == NULL) {
             fprintf(stderr, "host: HOST_CLOCK=frames, but 1st_read has no _nj_vsync_count_\n");
             return 1;
-        }
-    }
-    /* the SH-4 FPU models, HOST_FPU_FIPR, HOST_FPU_FTRV, HOST_FPU_FSRRA
-     * and HOST_FPU_FSCA: 0 the port's, 1 the console's bit for bit
-     * (xbox/port/fpu.c), and with none host.h's host_fpu_defaults. both
-     * sticks clicked, or F8, flip them */
-    {
-        int k;
-
-        fpu_models = (volatile int *)(uintptr_t)symbol_address(&main_symbols, "port_fpu");
-        fpu_note = (volatile int *)(uintptr_t)symbol_address(&main_symbols, "port_fpu_note");
-        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
-            fpu_chosen[k] = host_fpu_model(k, getenv(host_fpu_settings[k]));
-            if (fpu_models != NULL) {
-                fpu_models[k] = fpu_chosen[k];
-            }
-        }
-        if (fpu_models != NULL) {
-            fpu_log("");
-        } else {
-            fprintf(stderr, "host: 1st_read has no port_fpu: the SH-4 FPU settings do nothing\n");
         }
     }
     game_main = (void (*)(void))(uintptr_t)symbol_address(&main_symbols, "main");

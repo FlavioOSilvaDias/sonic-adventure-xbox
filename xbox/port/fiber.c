@@ -20,23 +20,6 @@ static struct sy_fiber *current;
 static struct sy_fiber *delayed;
 /* each fiber's function, which its first turn calls with its data */
 static void (*funcs[MAX_FIBERS])(void *);
-/* each fiber's port_fpu_own (xbox/include/sh4.h), while another runs: a
- * fiber that switches away inside sound's or a light's math keeps the port's
- * models to itself, and the fiber it switches to has its own */
-extern int port_fpu_own;
-static int owns[MAX_FIBERS];
-
-static void own_switch(struct sy_fiber *from, struct sy_fiber *to)
-{
-    int leaving = from != NULL && table != NULL ? (int)(from - table) : -1;
-    int coming = to != NULL && table != NULL ? (int)(to - table) : -1;
-
-    if (leaving >= 0 && leaving < MAX_FIBERS) {
-        owns[leaving] = port_fpu_own;
-    }
-    port_fpu_own = coming >= 0 && coming < MAX_FIBERS ? owns[coming] : 0;
-}
-
 /* save the kept registers and the stack pointer in *save, then load them
  * from load and return on its stack */
 void port_fiber_switch(void **save, void *load);
@@ -132,7 +115,6 @@ struct sy_fiber *syFbrCreateFiber(void *stack, Uint32 size, void (*func)(void *)
     fiber->sp = top;
     fiber->data = data;
     funcs[fiber - table] = func;
-    owns[fiber - table] = 0;
     return fiber;
 }
 
@@ -171,7 +153,6 @@ void syFbrSwitchToFiber(struct sy_fiber *fiber)
         return;
     }
     current = fiber;
-    own_switch(from, fiber);
     port_fiber_switch(&from->sp, fiber->sp);
 }
 
@@ -195,7 +176,6 @@ struct sy_fiber *port_fiber_current(struct sy_fiber *becomes)
     struct sy_fiber *was = current;
 
     if (becomes != NULL) {
-        own_switch(was, becomes);
         current = becomes;
     }
     return was;

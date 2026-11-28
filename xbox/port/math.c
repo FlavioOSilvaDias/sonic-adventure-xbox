@@ -20,47 +20,17 @@ float cosf(float x)
 
 #include "xbox/include/sh4.h"
 
-/* FSCA's sine and cosine of a 16-bit angle, 65536 to a turn, as the SH-4
- * gives them: Flycast's table of the console's own (fsca-table.h, GPL-2.0
- * as the port is), the sines of the first half turn, the second half their
- * negatives, and the cosine the sine a quarter turn on. because exact sines
- * differ from the console's in their last bits, the console's table is used */
-
-static const unsigned fsca_sines[0x8000] = {
-#include "xbox/third_party/flycast/core/hw/sh4/fsca-table.h"
-};
-
-static float table_sin(unsigned angle)
-{
-    union {
-        unsigned u;
-        float f;
-    } bits;
-
-    angle &= 0xffffu;
-    bits.u = fsca_sines[angle & 0x7fffu];
-    /* the second half's negated as Flycast negates it, so that 0x8000 is -0 */
-    return angle < 0x8000u ? bits.f : -bits.f;
-}
-
 /* sh4_sse.h's FIPR and FTRV take Flycast's sums where this is 0, as the
  * game does; xbox/test/libm.c sets it for the tests' float sums */
 int sh4_test_sums;
 
-/* HOST_FPU_FSCA=1 takes the exact model (xbox/port/fpu.c) instead. the
- * table holds the console's results rounded to nearest, and the game rounds
- * toward zero: under it, 38,056 of the 131,072 sines and cosines are one
- * unit of the last place further from 0 than the console's, and it gives
- * +0 for the sine at 0x8000 and the cosine at 0x4000, where the table's -0 */
+/* FSCA's sine and cosine of a 16-bit angle, 65536 to a turn, as the SH-4
+ * gives them under the game's rounding toward zero: the exact model's
+ * (xbox/port/fpu.c) */
 struct sh4_sincos port_sincos16(unsigned short angle)
 {
     struct sh4_sincos pair;
 
-    if (SH4_FPU_EXACT(SH4_FPU_FSCA)) {
-        port_fsca_exact(angle, &pair.sin, &pair.cos);
-        return pair;
-    }
-    pair.sin = table_sin(angle);
-    pair.cos = table_sin(angle + 0x4000u);
+    port_fsca_exact(angle, &pair.sin, &pair.cos);
     return pair;
 }

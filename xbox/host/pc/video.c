@@ -614,8 +614,6 @@ static void open_pad(void)
         }
     }
 }
-/* F8, the SH-4 FPU models' chord on the keyboard (video_fpu_chord) */
-static int fpu_key;
 
 static void poll(void)
 {
@@ -684,9 +682,6 @@ static void poll(void)
             case SDLK_ESCAPE:
                 quit = event.type == SDL_KEYDOWN;
                 break;
-            case SDLK_F8:
-                fpu_key = down;
-                break;
             default:
                 break;
             }
@@ -731,12 +726,6 @@ unsigned video_keys(void)
         }
     }
     return buttons;
-}
-
-int video_fpu_chord(void)
-{
-    return fpu_key || (pad != NULL && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK) &&
-                       SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSTICK));
 }
 
 void video_stick(int *x, int *y, int *l, int *r)

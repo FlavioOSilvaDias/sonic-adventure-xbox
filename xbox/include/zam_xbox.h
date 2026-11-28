@@ -83,7 +83,7 @@ ALWAYS_INLINE shz_vec3_t zam_xmtrx_point3(shz_vec3_t p)
     v[1] = p.y;
     v[2] = p.z;
     v[3] = 1.0F;
-    sh4_xmtrx_ftrv_picture(v, v);
+    sh4_xmtrx_ftrv(v, v);
     return shz_vec3_init(v[0], v[1], v[2]);
 }
 
@@ -95,9 +95,9 @@ ALWAYS_INLINE shz_vec3_t zam_xmtrx_turn3_transpose(shz_vec3_t v)
 {
     const Float *c = sh4_xmtrx;
 
-    return shz_vec3_init(sh4_fipr_picture(v.x, v.y, v.z, 0.0F, c[0], c[1], c[2], c[3]),
-                         sh4_fipr_picture(v.x, v.y, v.z, 0.0F, c[4], c[5], c[6], c[7]),
-                         sh4_fipr_picture(v.x, v.y, v.z, 0.0F, c[8], c[9], c[10], c[11]));
+    return shz_vec3_init(sh4_fipr(v.x, v.y, v.z, 0.0F, c[0], c[1], c[2], c[3]),
+                         sh4_fipr(v.x, v.y, v.z, 0.0F, c[4], c[5], c[6], c[7]),
+                         sh4_fipr(v.x, v.y, v.z, 0.0F, c[8], c[9], c[10], c[11]));
 }
 
 #endif

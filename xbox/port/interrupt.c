@@ -5,7 +5,8 @@
  * its eip and esp in port_interrupted_eip and port_interrupted_esp, and
  * resumes it at port_interrupt_entry on the interrupt stack, every other
  * register as it was. the entry saves them all, the flags and the x87 and
- * SSE state with FXSAVE, runs the blank, restores them and returns to the
+ * SSE state with FXSAVE, empties the x87's stack, runs the blank in the
+ * game's float modes (blank_handlers), restores them and returns to the
  * interrupted code, writing only the word below its stack pointer, as a
  * call would. so the game's stacks, which the console sized for its own
  * interrupts, take no signal frame.
@@ -54,6 +55,12 @@ __asm__(".text\n"
         "    pushal\n"
         "    subl $524, %esp\n"
         "    fxsave (%esp)\n"
+        /* the interrupted code may be mid-sum, values live on the x87's
+         * stack: the handlers, and a fiber the delayed switch resumes as from
+         * a call, start on an empty one, as a call does, under the
+         * interrupted control word, FXSAVE's first word, which FNINIT resets */
+        "    fninit\n"
+        "    fldcw (%esp)\n"
         "    cld\n"
         "    pushl %esp\n"
         "    call port_interrupt_body\n"
@@ -128,18 +135,29 @@ static void *park(const Uint8 *frame)
     return top;
 }
 
-/* the blank's handlers, as play, whose math takes the console's models: a
- * blank that lands inside sound's or a light's math, where port_fpu_own is
- * nonzero (xbox/include/sh4.h), runs them with it 0, then gives it back */
-extern int port_fpu_own;
+/* the game's float modes, as the host set them before main: MXCSR, less its
+ * sticky flags, taken on the game's thread at port_interrupt_init, and the
+ * x87's control word, 53 bits rounding toward zero (host.h) */
+static Uint32 game_mxcsr;
+#define GAME_X87_WORD 0x0e7f
 
+/* the blank's handlers, which are the game's code, in the game's float
+ * modes: a blank the host runs as a host call returns (run_now) finds the
+ * modes the host's code left, and one that interrupts the game the modes of
+ * wherever it landed. so that no handler's sum rounds by another mode, which
+ * differs from run to run with where the blank lands, the modes are the
+ * game's for them, then what they were */
 static void blank_handlers(void)
 {
-    int held = port_fpu_own;
+    Uint32 csr = __builtin_ia32_stmxcsr();
+    unsigned short word, game_word = GAME_X87_WORD;
 
-    port_fpu_own = 0;
+    __asm__ volatile("fnstcw %0" : "=m"(word));
+    __builtin_ia32_ldmxcsr(game_mxcsr);
+    __asm__ volatile("fldcw %0" : : "m"(game_word));
     port_blank_handlers();
-    port_fpu_own = held;
+    __builtin_ia32_ldmxcsr(csr);
+    __asm__ volatile("fldcw %0" : : "m"(word));
 }
 
 void port_interrupt_body(Uint8 *frame)
@@ -180,5 +198,6 @@ static const struct host_interrupt interrupt = {
 
 void port_interrupt_init(void)
 {
+    game_mxcsr = __builtin_ia32_stmxcsr() & ~0x3fu;
     HOST->set_interrupt(&interrupt);
 }

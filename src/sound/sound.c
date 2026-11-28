@@ -1398,15 +1398,7 @@ static int sound_distance_volume(int slot)
     if (squared < FALLOFF_NEAR * FALLOFF_NEAR) {
         volume = 0;
     } else {
-#ifdef XBOX
-        /* the port's own models for sound's math (xbox/include/sh4.h): the
-         * exact ones' cost is play's alone */
-        SH4_FPU_OWN_BEGIN();
         fade = njSqrt(squared);
-        SH4_FPU_OWN_END();
-#else
-        fade = njSqrt(squared);
-#endif
         fade = (fade - FALLOFF_NEAR) * (1.0F / (FALLOFF_FAR - FALLOFF_NEAR));
         if (fade < 0.0F) {
             fade = 0.0F;
@@ -1792,15 +1784,8 @@ void sound_orbit_step(struct task *task)
 
     work = task->work;
     work->ang.z += work->ang.y;
-#ifdef XBOX
-    SH4_FPU_OWN_BEGIN();
     x = njCos(work->ang.z) * work->scl.x;
     z = njSin(work->ang.z) * work->scl.x;
-    SH4_FPU_OWN_END();
-#else
-    x = njCos(work->ang.z) * work->scl.x;
-    z = njSin(work->ang.z) * work->scl.x;
-#endif
     sound_play_around(work->ang.x, (int)task, 1, work->scl.y, x + work->pos.x,
                       work->pos.y, z + work->pos.z, ORBIT_REACH, 2);
     if (placement_editing(task)) {
@@ -1947,17 +1932,9 @@ static int qsound_place(int slot)
     way.x = sound_slots[slot].pos.x;
     way.y = sound_slots[slot].pos.y;
     way.z = sound_slots[slot].pos.z;
-#ifdef XBOX
-    SH4_FPU_OWN_BEGIN();
     matrix_calc_point(&way);
     way.y = 0.0F;
     njUnitVector(&way);
-    SH4_FPU_OWN_END();
-#else
-    matrix_calc_point(&way);
-    way.y = 0.0F;
-    njUnitVector(&way);
-#endif
     side = (way.x + 1.0F) * 15.5F;
     place = (int)side * 4;
     return place;

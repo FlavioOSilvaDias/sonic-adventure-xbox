@@ -75,17 +75,10 @@ PC_PORT_HOT := xbox/port/render.c
 # and its movie player, whose file holds pl_mpeg's decoder: its IDCT, motion
 # compensation and bitstream reads run per pixel, each movie frame
 PC_PORT_HOT += xbox/port/movie.c
-# and the SH-4 FPU's models, which play calls for each FIPR, FTRV, FSRRA,
-# FSCA and fused product (xbox/port/fpu.c's exact models and FMAC, and
-# math.c's FSCA): -O2 inlines and unrolls the exact models' multiplier array
+# and the SH-4 FPU's models, which the game calls for each FSRRA and FSCA
+# (xbox/port/fpu.c's exact models, and math.c's FSCA)
 PC_PORT_HOT += xbox/port/fpu.c xbox/port/math.c
 PC_OPTIMIZE = $(if $(filter $(GCC_HOT) $(PC_PORT_HOT),$<),-O2,-Os)
-# PC_UNFUSED: sources whose products pc.mk's pc_compile_i leaves unfused,
-# though their release fuses them, so that they take the port's own FMAC,
-# the product and the sum rounded apart in SSE, and never the exact one's
-# cost: Sofdec's movie and stream player and its ADX decoder, whose results
-# only play sound and pictures (xbox/include/sh4.h's sound part)
-PC_UNFUSED := sdk/sofdec/%
 PCFLAGS = $(PC_TARGET) $(PC_OPTIMIZE) $(PC_ZEROS_IN_DATA) $(PC_AS_SHC) $(PC_LAYOUT) $(PC_WARNINGS)
 
 # PC_ADDED is the sources in xbox/ that add to a source of the tree, where
@@ -107,8 +100,8 @@ SH2C_QACR := --literal "H'FF000038=&port_qacr[0]" --declare 'extern volatile Uin
 # Ninja's model drawers and its lights only draw: the native game (make pc)
 # runs none of their bodies (engine/mk/native.mk compiles neither njModel.c
 # nor njLtSrcs.c, nor translates njModelS.c's bodies), so no step reads what
-# they compute. --picture gives them the port's own FIPR, FTRV and FSRRA,
-# where play takes the console's (xbox/include/sh4.h)
+# they compute. --picture gives them the exact 1 / sqrt for FSRRA, one a
+# vertex, where play takes the console's (xbox/include/sh4.h)
 SH2C_sdk/ninja/njModel.c := --picture --global R8=queue_cursor --declare 'extern Float _nj_vertex_offset_;' $(SH2C_QACR)
 SH2C_sdk/ninja/njModelS.c := --picture --global R8=sq_cursor --declare 'extern Float _nj_vertex_offset_;' $(SH2C_QACR)
 # the calls Ninja's bodies make, by SHC's convention: R4 to R7 and FR4 on,
@@ -131,7 +124,7 @@ SH2C_sdk/ninja/njSetCamera.c := $(SH2C_NINJA_CALLS)
 SH2C_sdk/ninja/njSetCameraAngle.c := $(SH2C_NINJA_CALLS)
 SH2C_sdk/ninja/njPointCamereInterest.c := $(SH2C_NINJA_CALLS)
 SH2C_sdk/ninja/njRollCameraInterest.c := $(SH2C_NINJA_CALLS)
-SH2C_sdk/ninja/njLtSrcs.c := --picture --own --declare 'extern const Float fpow_tbl[17][256];' \
+SH2C_sdk/ninja/njLtSrcs.c := --picture --declare 'extern const Float fpow_tbl[17][256];' \
 	--call '_lt_power=FR0 = lt_power(FR4, (Int)R4)' \
 	--dynamic '((void (*)(Uint32, Uint32, Uint32, Uint32))CALLEE)(R4, R5, R6, R7)'
 

@@ -2,8 +2,7 @@
  * (engine/dc/sa1/easy.h), which finds this one by name: the screen the
  * kernels project onto, the store queues by the port's stand-ins, and
  * zam_xmtrx_project_lit_points in C, on the port's models of FTRV and FIPR
- * for a drawer (xbox/include/sh4.h's _picture ones), where the Dreamcast's
- * is SH-4 assembly. the port
+ * (xbox/include/sh4.h), where the Dreamcast's is SH-4 assembly. the port
  * maps the store queues' area on RAM, so a store there writes the list */
 #ifndef BATCH_H
 #define BATCH_H
@@ -52,11 +51,11 @@ ALWAYS_INLINE int zam_xmtrx_project_lit_points(const float *points,
 
     for (k = 0; k < count; k++, points += 3, normals += 3, to += 4) {
         float v[4] = {points[0], points[1], points[2], 1.0F};
-        float dot = sh4_fipr_picture(light.x, light.y, light.z, light.w, normals[0],
+        float dot = sh4_fipr(light.x, light.y, light.z, light.w, normals[0],
                              normals[1], normals[2], 1.0F);
         float rhw;
 
-        sh4_xmtrx_ftrv_picture(v, v);
+        sh4_xmtrx_ftrv(v, v);
         if (v[2] > screen->near) {
             beyond++;
         }

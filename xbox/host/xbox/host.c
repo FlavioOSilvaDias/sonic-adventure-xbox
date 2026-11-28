@@ -909,8 +909,13 @@ static ULONGLONG sound_most_ticks; /* the most one blank's chores took, since th
 
 extern unsigned long long video_swap_wait_tsc; /* video.c's wait_off_screen, in this video_begin */
 
+static void fpu_check(void);
+
 static void leave_host(void)
 {
+    if (host_busy == 1) {
+        fpu_check();
+    }
     if (host_busy == 1) {
         unsigned long long took = __builtin_ia32_rdtsc() - call_started;
 
@@ -1329,43 +1334,6 @@ static void to_dashboard(void)
     HalReturnToFirmware(HalRebootRoutine);
 }
 
-/* the SH-4 FPU models (host.h's host_fpu_): the game's port_fpu and
- * port_fpu_note, or null in images older than them, and the settings'
- * values, which the chord flips against */
-static volatile int *fpu_models;
-static volatile int *fpu_note;
-static int fpu_chosen[HOST_FPU_INSTRUCTIONS];
-
-static void fpu_log(const char *why)
-{
-    logf_("host: SH-4 FPU models in play%s: FIPR %s, FTRV %s, FSRRA %s, FSCA %s, FMAC %s\n", why,
-            fpu_models[0] ? "exact" : "port", fpu_models[1] ? "exact" : "port", fpu_models[2] ? "exact" : "port",
-            fpu_models[3] ? "exact" : "port", fpu_models[4] ? "exact" : "port");
-}
-
-/* both sticks clicked, fresh: the models flip (host_fpu_flip) */
-static void fpu_chord(int clicked)
-{
-    static int clicked_was;
-    int models[HOST_FPU_INSTRUCTIONS];
-    int k;
-
-    if (clicked && !clicked_was && fpu_models != NULL) {
-        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
-            models[k] = fpu_models[k];
-        }
-        host_fpu_flip(fpu_chosen, models);
-        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
-            fpu_models[k] = models[k];
-        }
-        if (fpu_note != NULL) {
-            *fpu_note = HOST_FPU_NOTE_FRAMES;
-        }
-        fpu_log(", flipped by the sticks' clicks");
-    }
-    clicked_was = clicked;
-}
-
 /* the right stick's dead zone, percent of its throw across: wider than the
  * left stick's (HOST_STICK_DEAD), so that a thumb resting on it turns the
  * camera less */
@@ -1437,8 +1405,6 @@ static unsigned pad_buttons(int *x, int *y, int *l, int *r)
         }
         back_was = back;
     }
-    fpu_chord(SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK) &&
-              SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSTICK));
     /* SDL's -32768 to 32767 as the console's 0 to 255, 128 at rest, past a
      * dead zone (host_stick; HOST_DEADZONE=PERCENT of the throw, 0 for
      * none), and its triggers' 0 to 32767 as 0 to 255 */
@@ -1665,7 +1631,8 @@ static void raw_video_vertices(const struct host_vertex *vertices, int count)
 /* the game's MXCSR, as fpu_as_console set it before main */
 static unsigned game_csr;
 
-/* the game's float modes, checked once a frame on its thread: MXCSR less its
+/* the game's float modes, checked as each of the game's host calls returns
+ * (leave_host), before a blank the call held back runs: MXCSR less its
  * sticky exception flags, and the x87's control word. code the game's thread
  * calls into (the host's, nxdk's, pbkit's) must leave them as they were, or
  * the game's sums round otherwise than the console's, as the blank's chores
@@ -1677,6 +1644,9 @@ static void fpu_check(void)
     unsigned csr;
     unsigned short word;
 
+    if (game_csr == 0) {
+        return; /* before main: the modes aren't the game's yet */
+    }
     __asm__ volatile("stmxcsr %0" : "=m"(csr));
     __asm__ volatile("fnstcw %0" : "=m"(word));
     if ((csr & ~0x3fu) == (game_csr & ~0x3fu) && word == 0x0e7f) {
@@ -1695,7 +1665,6 @@ static void fpu_check(void)
 
 static void raw_video_present(void)
 {
-    fpu_check();
     if (have_video) {
         video_present();
     }
@@ -2836,27 +2805,6 @@ static DWORD __stdcall run_game(LPVOID unused)
               wide ? "on" : "off", asked, dashboard ? "on" : "off",
               fast ? "on" : "off",
               toggles != 0 && chosen != 0 ? "" : ", but the images have no port_toggles or port_chosen");
-    }
-    /* the SH-4 FPU models, HOST_FPU_FIPR, HOST_FPU_FTRV, HOST_FPU_FSRRA
-     * and HOST_FPU_FSCA: 0 the port's, 1 the console's bit for bit
-     * (xbox/port/fpu.c), and with no line host.h's host_fpu_defaults. both
-     * sticks clicked flip them */
-    {
-        int k;
-
-        fpu_models = (volatile int *)symbol_address(&main_symbols, "port_fpu");
-        fpu_note = (volatile int *)symbol_address(&main_symbols, "port_fpu_note");
-        for (k = 0; k < HOST_FPU_INSTRUCTIONS; k++) {
-            fpu_chosen[k] = host_fpu_model(k, setting(host_fpu_settings[k]));
-            if (fpu_models != NULL) {
-                fpu_models[k] = fpu_chosen[k];
-            }
-        }
-        if (fpu_models != NULL) {
-            fpu_log("");
-        } else {
-            logf_("host: the game's images have no port_fpu: the SH-4 FPU settings do nothing\n");
-        }
     }
     /* the movies play where D:\movies.pak holds them. HOST_MOVIES=0, or no
      * pack, makes each end as it starts (movie.c's port_movie_skip) */

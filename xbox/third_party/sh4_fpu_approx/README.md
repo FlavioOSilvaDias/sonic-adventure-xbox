@@ -8,5 +8,7 @@ verified against a real Dreamcast, by Stefanos Kornilios Mitsis Poiitidis
   (revision a61dd6de0304c631b77915352e9d4dba48f2262d), copied unchanged.
 - Write-up: https://drk.emudev.org/blog/sh4-fpu/
 
-The port calls it from `xbox/port/fpu.c` when a `HOST_FPU_*` setting asks for
-the exact model (XBOX.md, Debug flags).
+The port takes its FSRRA, through a 32-bit copy (`xbox/port/sh4_fpu_fast.h`),
+and its FSCA, as a table of its sines (`xbox/port/fsca_exact_table.h`), in
+`xbox/port/fpu.c`; `xbox/test/fpu_exact.sh` checks both against it (XBOX.md,
+SH-4 FPU models).

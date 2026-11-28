@@ -1,8 +1,8 @@
 /* the C runtime's atan2f, asinf and acosf (sdk/runtime/): SHC's code for
  * them on the SH-4, against the game's x86 objects on x86, as make pc builds
- * them, their fused products the port's FMAC under HOST_FPU_FMAC=1's exact
- * model. the game's turns and slopes take them every step, so a difference
- * in a last bit moves play */
+ * them, their fused products the console's FMAC (tools/pcfmac.py). the
+ * game's turns and slopes take them every step, so a difference in a last
+ * bit moves play */
 #include "harness.h"
 
 float atan2f(float y, float x);
@@ -14,9 +14,6 @@ float acosf(float x);
 int _errno;
 #else
 int _errno;
-/* the port's FMAC reads port_fpu (tools/pcfmac.py), which xbox/port/fpu.c,
- * through libm.c, defines: main asks for the exact model, as in play */
-extern int port_fpu[5];
 #endif
 
 #define CASES 200000
@@ -63,7 +60,6 @@ int main(void)
         unsigned short word = 0x0e7f;
 
         __asm__ volatile("fldcw %0" : : "m"(word));
-        port_fpu[4] = 1;
     }
 #endif
     for (k = 0; k < CASES; k++) {

@@ -121,21 +121,6 @@ void port_overlay_draw(void)
     /* the frame being made, to name a moment in a capture of the screen */
     njPrintC(LOCATION(27, 14), "FRM");
     njPrintD(LOCATION(31, 14), (int)(_nj_vsync_count_ % 1000000u), 6);
-    port_fpu_draw();
-    njPrintColor(0xffbfbfbfu);
-}
-
-void port_fpu_draw(void)
-{
-    static const char *const names[5] = {"FIPR", "FTRV", "FSRRA", "FSCA", "FMAC"};
-    int k;
-
-    for (k = 0; k < 5; k++) {
-        /* the exact models in cyan, the port's in the figures' yellow */
-        njPrintColor(port_fpu[k] ? 0xff00ffffu : 0xffffff00u);
-        njPrintC(LOCATION(27, 15 + k), names[k]);
-        njPrintC(LOCATION(33, 15 + k), port_fpu[k] ? "EXACT" : "PORT");
-    }
     njPrintColor(0xffbfbfbfu);
 }
 

@@ -15,53 +15,18 @@
 #include <ninja.h>
 #include "sse/sh4_sse.h"
 
-/* each instruction's model in play, by port_fpu (xbox/port/fpu.c), which
- * the host sets from HOST_FPU_FIPR, HOST_FPU_FTRV, HOST_FPU_FSRRA,
- * HOST_FPU_FSCA and HOST_FPU_FMAC: 0 the port's own below; 1, the default,
- * the console's FPU bit for bit, xbox/third_party/sh4_fpu_approx/'s models
- * and fpu.c's FMAC. FTRV's takes FIPR's datapath four times, but has a
- * setting of its own. host.h's HOST_FPU_ order.
- *
- * play and picture, as ENGINE.md#numbers parts them: math whose result a
- * game step reads takes these models, and math that only draws takes the
- * _picture ones below, the port's own whatever port_fpu says, as the
- * native game draws on the host's arithmetic. a call that names no
- * _picture model is play's, so only a drawer's own call takes the port's:
- * xbox/engine/'s kernels and model walk, the Dreamcast engine's sprites and
- * easy light (zam_xbox.h), and the vertices and lights of Ninja's model
- * drawers (tools/sh2c.py --picture, njModel.c, njModelS.c) */
-enum sh4_fpu_instruction {
-    SH4_FPU_FIPR,
-    SH4_FPU_FTRV,
-    SH4_FPU_FSRRA,
-    SH4_FPU_FSCA,
-    SH4_FPU_FMAC,
-    SH4_FPU_INSTRUCTIONS
-};
-extern int port_fpu[SH4_FPU_INSTRUCTIONS];
-/* nonzero where the port's own models are asked for, whatever port_fpu
- * says: sound's math (src/sound/), and Ninja's lights, between
- * SH4_FPU_OWN_BEGIN and SH4_FPU_OWN_END, whose results only shade and pan,
- * and no game step reads. each fiber keeps its own (xbox/port/fiber.c), and
- * the blank's handlers run with it 0 (xbox/port/interrupt.c), as play */
-extern int port_fpu_own;
-#define SH4_FPU_OWN_BEGIN() (port_fpu_own++)
-#define SH4_FPU_OWN_END() (port_fpu_own--)
-/* 0; 1 by a poke (HOST_POKE=1:port_fpu_all+0:1) for a test that every
- * model in the game is port_fpu's: sound's, the lights' and the drawers'
- * too, the _picture ones below among them */
-extern int port_fpu_all;
-/* the exact model of instruction, where port_fpu asks for it and no
- * SH4_FPU_OWN_BEGIN does otherwise */
-#define SH4_FPU_EXACT(instruction) (port_fpu[instruction] && (!port_fpu_own || port_fpu_all))
-float port_fipr_exact(float a0, float a1, float a2, float a3, float b0, float b1, float b2, float b3);
-void port_ftrv_exact(const float xf[16], const float v[4], float out[4]);
+/* the console's FSRRA and FSCA bit for bit (xbox/port/fpu.c, by
+ * xbox/third_party/sh4_fpu_approx/'s models, measured against a Dreamcast),
+ * and its FMAC for the products SHC fuses, which tools/pcfmac.py writes
+ * inline at each and port_fmac gives as a call. FIPR and FTRV are Flycast's sums
+ * (sh4_sse.h): the exact ones, a model of the multiplier array, cost about
+ * 20 ms of a busy frame on the Xbox for sums that differ in 8% of cases,
+ * nearly all by one unit of the last place. a drawer's FSRRA, one a vertex,
+ * is the exact 1 / sqrt (sh4_fsrra_picture), as the console's model costs
+ * ten times it */
 float port_fsrra_exact(float n);
 void port_fsca_exact(unsigned angle, float *sin, float *cos);
-/* f0 * fm + fn as SHC's FMAC gives it, the products SHC fuses: the port's
- * build calls it for each multiply-add clang contracts (tools/pcfmac.py).
- * under HOST_FPU_FMAC=0 the product and the sum round apart, as the port's
- * build gave them before */
+/* f0 * fm + fn as SHC's FMAC gives it, rounded once, denormals as zero */
 float port_fmac(float f0, float fm, float fn);
 
 /* a helper that inlines at every call, as zam.h defines it for make gcc */
@@ -86,42 +51,23 @@ static inline Sint32 sh4_ftrc(Float f)
  * it one, leaves alone */
 typedef float sh4_double __attribute__((mode(DF)));
 
-/* FMAC: a * b + c, rounded once. the product of two floats is exact as a
- * double, and rounding toward zero twice, to a double and then to a float,
- * gives what rounding once does */
+/* FMAC, where the original assembly has one (tools/sh2c.py, xbox/sdk/):
+ * a * b + c, rounded once. the product of two floats is exact as a double,
+ * and rounding toward zero twice, to a double and then to a float, gives
+ * what rounding once does */
 static inline Float sh4_fmac(Float a, Float b, Float c)
 {
     return (Float)((sh4_double)a * (sh4_double)b + (sh4_double)c);
 }
 
-/* FIPR FVm,FVn: a is FVm and b FVn, the operand the console's multiplier
- * recodes, as tools/sh2c.py passes them; the exact model's products
- * depend on which is which. on the Xbox and the PC, Flycast's: the four
- * products as doubles, summed in order, rounded once toward zero
- * (sh4_sse.h), or the exact model's under HOST_FPU_FIPR=1. elsewhere, the
- * port's tests' model: the sum of the four products in order, each
- * rounded, then each sum */
+/* FIPR FVm,FVn. on the Xbox and the PC, Flycast's: the four products as
+ * doubles, summed in order, rounded once toward zero (sh4_sse.h).
+ * elsewhere, the port's tests' model: the sum of the four products in
+ * order, each rounded, then each sum */
 static inline Float sh4_fipr(Float a0, Float a1, Float a2, Float a3, Float b0,
                              Float b1, Float b2, Float b3)
 {
 #ifdef XBOX
-    if (SH4_FPU_EXACT(SH4_FPU_FIPR)) {
-        return port_fipr_exact(a0, a1, a2, a3, b0, b1, b2, b3);
-    }
-    return sh4_sse_fipr(a0, a1, a2, a3, b0, b1, b2, b3);
-#else
-    return a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
-#endif
-}
-
-/* FIPR for a drawer: the port's own, whatever port_fpu says */
-static inline Float sh4_fipr_picture(Float a0, Float a1, Float a2, Float a3, Float b0, Float b1, Float b2,
-                                     Float b3)
-{
-#ifdef XBOX
-    if (port_fpu_all) {
-        return sh4_fipr(a0, a1, a2, a3, b0, b1, b2, b3);
-    }
     return sh4_sse_fipr(a0, a1, a2, a3, b0, b1, b2, b3);
 #else
     return a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
@@ -159,14 +105,10 @@ static inline void sh4_xmtrx_set(const Float xf[16])
 
 /* FTRV of v by the matrix whose XF0 to XF15 are xf: out[i] is the sum over
  * j of xf[i + 4j] * v[j], in order of j. v is read whole before out is
- * written, so the two may be one. the exact model under HOST_FPU_FTRV=1 */
+ * written, so the two may be one */
 static inline void sh4_ftrv(const Float xf[16], const Float v[4], Float out[4])
 {
 #ifdef XBOX
-    if (SH4_FPU_EXACT(SH4_FPU_FTRV)) {
-        port_ftrv_exact(xf, v, out);
-        return;
-    }
     sh4_sse_ftrv(xf, v, out);
 #else
     Float in[4];
@@ -187,33 +129,6 @@ static inline void sh4_xmtrx_ftrv(const Float v[4], Float out[4])
     sh4_ftrv(sh4_xmtrx, v, out);
 }
 
-/* FTRV for a drawer: the port's own, whatever port_fpu says */
-static inline void sh4_ftrv_picture(const Float xf[16], const Float v[4], Float out[4])
-{
-#ifdef XBOX
-    if (port_fpu_all) {
-        sh4_ftrv(xf, v, out);
-        return;
-    }
-    sh4_sse_ftrv(xf, v, out);
-#else
-    Float in[4];
-    int i;
-
-    for (i = 0; i < 4; i++) {
-        in[i] = v[i];
-    }
-    for (i = 0; i < 4; i++) {
-        out[i] = xf[i] * in[0] + xf[i + 4] * in[1] + xf[i + 8] * in[2] + xf[i + 12] * in[3];
-    }
-#endif
-}
-
-static inline void sh4_xmtrx_ftrv_picture(const Float v[4], Float out[4])
-{
-    sh4_ftrv_picture(sh4_xmtrx, v, out);
-}
-
 /* FTRV XMTRX of (p, w): w 1 for a point, 0 for a vector. out takes the
  * first three of the four results */
 static inline void sh4_xmtrx_apply3(const NJS_POINT3 *p, Float w, NJS_POINT3 *out)
@@ -230,49 +145,28 @@ static inline void sh4_xmtrx_apply3(const NJS_POINT3 *p, Float w, NJS_POINT3 *ou
     out->z = v[2];
 }
 
-/* sh4_xmtrx_apply3 for a drawer */
-static inline void sh4_xmtrx_apply3_picture(const NJS_POINT3 *p, Float w, NJS_POINT3 *out)
-{
-    Float v[4];
-
-    v[0] = p->x;
-    v[1] = p->y;
-    v[2] = p->z;
-    v[3] = w;
-    sh4_xmtrx_ftrv_picture(v, v);
-    out->x = v[0];
-    out->y = v[1];
-    out->z = v[2];
-}
-
-/* FSRRA: 1 / sqrt(n). the console's is an estimate, within 2 units of the
- * last place; this is exact, or the console's estimate bit for bit under
- * HOST_FPU_FSRRA=1. a negative n gives a NaN, as the SH-4's invalid
- * operation does, and +0 an infinity */
+/* FSRRA: 1 / sqrt(n), the console's estimate bit for bit, within 2 units
+ * of the last place of the exact. a negative n gives a NaN, as the SH-4's
+ * invalid operation does, and +0 an infinity. elsewhere than the Xbox and
+ * the PC, the exact 1 / sqrt */
 static inline Float sh4_fsrra(Float n)
 {
 #ifdef XBOX
-    if (SH4_FPU_EXACT(SH4_FPU_FSRRA)) {
-        return port_fsrra_exact(n);
-    }
-#endif
+    return port_fsrra_exact(n);
+#else
     return 1.0F / __builtin_sqrtf(n);
+#endif
 }
 
-/* FSRRA for a drawer: the exact 1 / sqrt, whatever port_fpu says */
+/* FSRRA for a drawer, at each vertex (tools/sh2c.py --picture): the exact
+ * 1 / sqrt, a tenth of the console model's cost. no game step reads it */
 static inline Float sh4_fsrra_picture(Float n)
 {
-#ifdef XBOX
-    if (port_fpu_all) {
-        return sh4_fsrra(n);
-    }
-#endif
     return 1.0F / __builtin_sqrtf(n);
 }
 
 /* FSCA: the sine and cosine of a 16-bit angle, 65536 to a turn, by the
- * console's own table, or the exact model under HOST_FPU_FSCA=1
- * (xbox/port/math.c; the tests' model in xbox/test/libm.c) */
+ * console's model (xbox/port/math.c; the tests' model in xbox/test/libm.c) */
 struct sh4_sincos {
     Float sin, cos;
 };

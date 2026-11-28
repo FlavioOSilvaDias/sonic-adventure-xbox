@@ -15,8 +15,8 @@
 # for what qemu-sh4's layout of memory can't run as the console does; its
 # comments say why.
 #
-# Both link libm.c, so the tests' models of FSCA and FSRRA give the same
-# bits on both. It prints whether the runs match, and leaves both
+# Both link libm.c, so the tests' model of FSCA and the console's FSRRA
+# give the same bits on both. It prints whether the runs match, and leaves both
 # outputs and their diff under build/pc/test/NAME/. Run it from the
 # checkout's root, after SH_ASSEMBLY is written (all.sh writes its own)
 set -eu
@@ -85,10 +85,10 @@ done
     xbox/test/start.s xbox/test/emulate.s xbox/test/emulate.c xbox/test/libm.c \
     "xbox/test/${name}_test.c" $sh_objects -lgcc
 
-# the x86 side takes the tests' models of FIPR, FTRV, FSCA and FSRRA from
-# libm.c (sh4_test_sums: float sums; port_sincos16: libm.c's sines), as
-# emulate.c runs them on the SH-4 side, where the game takes the console's
-# (Flycast's sums, the console's FSCA table): so a difference is the
+# the x86 side takes the tests' models of FIPR, FTRV and FSCA from libm.c
+# (sh4_test_sums: float sums; port_sincos16: libm.c's sines), and the
+# console's FSRRA, as emulate.c runs them on the SH-4 side, where the game
+# takes Flycast's sums and the console's FSCA: so a difference is the
 # translation's. the port's C is make pc's, or make pc's object itself
 resource=$($cc -print-resource-dir)/include
 flags="--target=i386-linux-gnu -msse2 -mfpmath=sse -std=gnu17 -ffreestanding -fno-builtin -nostdinc
